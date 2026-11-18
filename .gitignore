@@ -1,0 +1,9 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Results and work folders, if created inside the repository
+results/
+results_*/
+repro-work/
+repro-results.tar.gz
