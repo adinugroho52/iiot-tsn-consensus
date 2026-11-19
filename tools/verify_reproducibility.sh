@@ -11,7 +11,7 @@
 #      contrib/tsn at a fixed commit (or from a clone you name);
 #   3. copies this repository into the ns-3 tree, configures and builds;
 #   4. runs the repository's own tests and the README smoke test;
-#   5. runs all 691 runs of the paper (about 20 h serially), resumably;
+#   5. runs all 697 runs of the paper (about 20 h serially), resumably;
 #   6. compares every run with the reference: each summary value, and the
 #      SHA-256 of every run log, per-frame CSV and capture file;
 #   7. packs the results into WORK/repro-results.tar.gz (under 10 MB).
@@ -127,6 +127,7 @@ SETS=(
   "e12||e12"
   "e13||e13"
   "e14||e14"
+  "e15||e15"
   "figs||figs"
   "figs_c005_8sw||--ctrl-frac 0.005 --extra --nSwitches=8 figs"
   "figs_e14||figs_e14"

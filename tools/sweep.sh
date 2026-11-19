@@ -22,6 +22,7 @@
 #   e12  uncertainty: 20 random draws (clock error, round phase, placement)        180
 #   e13  burst capacity by traffic class and device queue size                       8
 #   e14  capacity mechanism: dequeue pacing (100 Mbps) and the late count (path)     7
+#   e15  consensus-window limit: configurations at the edge of the counting rule     6
 #   figs packet captures for the figures (4 runs)
 #   figs_e14  packet capture of one e14 configuration (1 run)
 # `all` runs everything except e12 and the capture sets (figs*). Summarise with frontier.py (e5-e8) and
@@ -571,6 +572,45 @@ if wants e14; then
     c="e14-b266-s$S-r1"
     launch "$c" e14 "b266-s$S" 1 "$CSV/$c.csv" \
       --linkRate=1Gbps --nSwitches=$S --ctrlBurst=266 --latencyCsv="$CSV/$c.csv"
+  done
+  wait
+fi
+
+# =============================================================================
+# e15 -- consensus-window limit: the counting rule at its edge
+#
+# The rule: a TAS configuration commits every round if and only if the busiest
+# link's consensus frames per round, M_max, do not exceed the whole frames its
+# windows pass per round, N_cyc * K * floor((W_k / K) / tau_k). Each pair below
+# puts one configuration just inside the limit and one just outside it, so the
+# outcome of every run is stated before it runs.
+#   1 Gbps, 4 switches, 16 validators, 1024 B: M_max = 128, 35 frames per 300 us.
+#     W_k = 300 us, 4 ms rounds: 140 >= 128, commits.  3 ms rounds: 105, fails.
+#     W_k = 275 us, 4 ms rounds: 32 x 4 = 128, commits (demand equals capacity).
+#     W_k = 260 us, 4 ms rounds: 30 x 4 = 120, fails.
+#   100 Mbps, 8 switches, 10 validators, 1024 B, one 600 us window: M_max = 50,
+#     7 frames per cycle. 8 ms rounds: 56, commits.  7 ms rounds: 49, fails by
+#     one frame per round; that run lasts 12 s so the backlog has time to show.
+# The configurations are fixed here; per-cell flags come last and take precedence
+# over --link and --extra.
+# =============================================================================
+if wants e15; then
+  echo "== e15: consensus-window limit"
+  E15_1G="--linkRate=1Gbps --nSwitches=4 --nValidators=16 --consensusMsgSize=1024"
+  E15_100M="--linkRate=100Mbps --consFrac=0.60 --nSwitches=8 --nValidators=10 --consensusMsgSize=1024 --consSlices=1"
+  # tag | flags
+  for entry in \
+    "1g-w300-t4ms|$E15_1G --consensusInterval=4ms" \
+    "1g-w300-t3ms|$E15_1G --consensusInterval=3ms" \
+    "1g-w275-t4ms|$E15_1G --consFrac=0.275 --consensusInterval=4ms" \
+    "1g-w260-t4ms|$E15_1G --consFrac=0.26 --consensusInterval=4ms" \
+    "100m-k1-t8ms|$E15_100M --consensusInterval=8ms" \
+    "100m-k1-t7ms|$E15_100M --consensusInterval=7ms --stopAt=12.0s"; do
+    tag="${entry%%|*}"; flags="${entry#*|}"
+    c="e15-$tag-r1"
+    # shellcheck disable=SC2086
+    launch "$c" e15 "$tag" 1 "$CSV/$c.csv" $flags \
+      --latencyCsv="$CSV/$c.csv" --consensusCsv="$CSV/$c-cons.csv"
   done
   wait
 fi

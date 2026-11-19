@@ -30,3 +30,11 @@ Development stages, oldest first. The repository holds the merged result.
 - Added experiment `e14` (7 runs) and the capture set `figs_e14` (1 run) to `sweep.sh`, with their predictions in the block comments; the `e13` comment no longer states the superseded hypothesis. `all` now leaves out every capture set (`figs*`).
 - `tests/check_sweep.sh` and `tools/verify_reproducibility.sh` cover the new sets; the paper now has 691 runs (about 20 h serially), and `--quick` includes `figs_e14`.
 - `tools/reference/e14` and `tools/reference/figs_e14` hold their reference results, from runs on ns-3.49 with the TAS module at commit `3d00954`. The other reference sets are unchanged, and the simulator source is unchanged, so every earlier run still reproduces.
+
+## Consensus-window rule (e15)
+
+- Rule 4 of the README is now proved necessary in every configuration and sufficient wherever consensus rounds do not overlap. Added `tools/round_check.sh` and `tools/round_check.py`, which rerun the 68 feasible TAS configurations with receive captures at every validator and report whether every round leaves the network before the next one starts: no overlap in 61, so the rule is proved for them; rounds overlap in the other 7, where it is observed.
+- `round_check.py` reassembles fragmented messages: a message above 1472 bytes travels as two IP fragments, matched by source, destination and IP ID (ns-3 numbers IDs per source-destination pair), and a message counts as delivered when its last fragment arrives.
+- Added experiment `e15` (6 runs) to `sweep.sh`: configurations placed just inside and just outside the limit of rule 4, with the predicted outcome of each in the block comment. The counting rule now covers 84 TAS configurations (68 feasible, 16 not).
+- `tests/check_sweep.sh` and `tools/verify_reproducibility.sh` cover `e15`; the paper now has 697 runs (about 20 h serially).
+- `tools/reference/e15` holds the summaries and run-log checksums of `e15`, from runs on ns-3.49 with the TAS module at commit `3d00954`. Its runs also write per-frame and per-commit CSVs, which the reference does not list; `tools/compare_reference.py make` adds their checksums from any run. The simulator source and every other reference set are unchanged.
