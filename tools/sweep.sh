@@ -21,8 +21,10 @@
 #   e11  consensus window slices                                                    14
 #   e12  uncertainty: 20 random draws (clock error, round phase, placement)        180
 #   e13  burst capacity by traffic class and device queue size                       8
+#   e14  capacity mechanism: dequeue pacing (100 Mbps) and the late count (path)     7
 #   figs packet captures for the figures (4 runs)
-# `all` runs everything except e12 and figs. Summarise with frontier.py (e5-e8) and
+#   figs_e14  packet capture of one e14 configuration (1 run)
+# `all` runs everything except e12 and the capture sets (figs*). Summarise with frontier.py (e5-e8) and
 # uncertainty.py (e12).
 #
 # Resumption is by row in summary.csv, written only after a run exits zero: an
@@ -106,7 +108,7 @@ wants() {
   local e="$1"
   for w in "${WANT[@]}"; do
     [[ "$w" == "$e" ]] && return 0
-    [[ "$w" == "all" && "$e" != "figs" && "$e" != "e12" ]] && return 0
+    [[ "$w" == "all" && "$e" != figs* && "$e" != "e12" ]] && return 0
   done
   return 1
 }
@@ -516,12 +518,13 @@ fi
 # =============================================================================
 # e13 -- why does the control class admit one frame more than strict fit?
 #
-# Needs the --ctrlTos and --devQueue patches. Hypothesis: with a q-packet device
-# queue, the qdisc commits frame m while frame m-q is starting, and the gate's
-# fit test runs at that moment against the qdisc-size frame time d, so
-#   capacity = floor((W - d) / frame time) + 1 + q.
-# At 1 Gbps, 64 B payloads, W = 200 us that is 266, 267, 269, 273 for q = 1, 2, 4, 8.
-# Strict fit with no committed frame would stay at 265. The same burst is sent in
+# Needs the --ctrlTos and --devQueue patches. The TAS qdisc tests the fit and
+# paces its dequeues with d, the frame time at its network-layer size (no PPP
+# header), slightly shorter than the frame time tau on the wire. A frame in the
+# device queue leaves even after its gate closes, so a backlogged port releases
+#   min( floor((W - d) / tau) + 1 + q ,  floor((W - d) / d) + 1 )
+# frames per cycle. At 1 Gbps, 64 B payloads, W = 200 us that is 266, 267, 269,
+# 271 for q = 1, 2, 4, 8 (the pacing term binds at q = 8). e14 tests it further. The same burst is sent in
 # the control class (ToS 16) and in the consensus class (ToS 24) with equal windows,
 # so any class dependence shows up directly. Delivered frames per cycle =
 # ctrl_recv / 5400 for a 6 s run.
@@ -536,6 +539,38 @@ if wants e13; then
         --ctrlFrac=0.2 --consFrac=0.2 --nSwitches=4 --nValidators=4 --consensusMsgSize=256 \
         --latencyCsv="$CSV/$c.csv"
     done
+  done
+  wait
+fi
+
+# =============================================================================
+# e14 -- capacity mechanism: the two properties of the TAS qdisc behind e13
+#
+# Part 1, 100 Mbps, B = 40, W_c = W_k = 200 us, q = 1, 2, 4, 8. The pacing term of
+#   min( floor((W - d) / tau) + 1 + q ,  floor((W - d) / d) + 1 )
+# is 27 and binds at every q; the device-queue term alone would give 27, 28, 30,
+# 34. Expected: 27 frames delivered per cycle (ctrl_recv / 5400) in all four runs,
+# and the four runs identical.
+# Part 2, 1 Gbps, B = 266 (one frame above the 265 a 200 us window holds), with
+# 8, 12 and 16 switches. Frame 266 reaches every switch with less window left
+# than d, so each switch holds back one frame per cycle. Expected: 266 delivered
+# per cycle and n of them late (ctrl_missed / 5400 = 8, 12, 16).
+# The configurations are fixed here; --link and --extra still reach every run
+# through COMMON, but the per-cell flags come last and take precedence.
+# =============================================================================
+if wants e14; then
+  echo "== e14: capacity mechanism (dequeue pacing at 100 Mbps; late count by path length)"
+  for Q in ${E14_QUEUES:-1 2 4 8}; do
+    c="e14-100M-q$Q-r1"
+    launch "$c" e14 "100M-q$Q" 1 "$CSV/$c.csv" \
+      --linkRate=100Mbps --ctrlTos=16 --devQueue=${Q}p --ctrlBurst=40 \
+      --ctrlFrac=0.2 --consFrac=0.2 --nSwitches=4 --nValidators=4 --consensusMsgSize=256 \
+      --latencyCsv="$CSV/$c.csv"
+  done
+  for S in ${E14_SWITCHES:-8 12 16}; do
+    c="e14-b266-s$S-r1"
+    launch "$c" e14 "b266-s$S" 1 "$CSV/$c.csv" \
+      --linkRate=1Gbps --nSwitches=$S --ctrlBurst=266 --latencyCsv="$CSV/$c.csv"
   done
   wait
 fi
@@ -570,6 +605,24 @@ if wants figs; then
 
   fig fig-e2e "${COMMON[*]} --run=1 --pcapPoints=control --pcapMode=rx \
     --pcapStart=0.5s --pcapStop=0.52s --pcapPrefix=$PCAP/fig-e2e"
+fi
+
+# =============================================================================
+# figs_e14 -- one e14 configuration captured on every port of the path:
+# 100 Mbps, B = 40, q = 8. Expected per port and cycle: 27 frames, exactly one of
+# them overrunning the gate close and none starting after it (the device-queue
+# term alone would let 8 leave after the close).
+# =============================================================================
+if wants figs_e14; then
+  echo "== figs_e14: capture of one e14 configuration"
+  if [[ $LIST -eq 1 ]]; then echo "  fig   fig-e14"
+  elif [[ $DRY -eq 1 ]]; then
+    printf '%s run "%s %s"\n' "$NS3" "$PROG" "${COMMON[*]} --run=1 --linkRate=100Mbps --ctrlTos=16 --devQueue=8p --ctrlBurst=40 --ctrlFrac=0.2 --consFrac=0.2 --nSwitches=4 --nValidators=4 --consensusMsgSize=256 --pcapPoints=path --pcapStart=0.5s --pcapStop=0.52s --pcapPrefix=$PCAP/fig-e14"
+  elif "$NS3" run "$PROG ${COMMON[*]} --run=1 --linkRate=100Mbps --ctrlTos=16 --devQueue=8p \
+      --ctrlBurst=40 --ctrlFrac=0.2 --consFrac=0.2 --nSwitches=4 --nValidators=4 \
+      --consensusMsgSize=256 --pcapPoints=path --pcapStart=0.5s --pcapStop=0.52s \
+      --pcapPrefix=$PCAP/fig-e14" > "$LOG/fig-e14.log" 2>&1; then echo "ok    fig-e14"
+  else echo "fig-e14" >> "$FAILED"; echo "FAIL  fig-e14 -- see $LOG/fig-e14.log" >&2; fi
 fi
 
 # --- wrap up -----------------------------------------------------------------

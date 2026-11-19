@@ -12,7 +12,7 @@ simulated, not a blockchain.
 
 ## Status
 
-This is the revision the paper's results come from. Built on ns-3.49 with the TAS module at commit `3d00954`, all 684
+This is the revision the paper's results come from. Built on ns-3.49 with the TAS module at commit `3d00954`, all 691
 runs reproduce the reference results in `tools/reference/` exactly; `tools/verify_reproducibility.sh` repeats that check
 from scratch (see "Reproducing the paper's results" below).
 
@@ -91,7 +91,10 @@ experiment and its cell count. What each one showed:
 | e10 | priority's worst case rises with device-queue size; TAS and FIFO do not |
 | e11 | slicing the consensus window buys at most about 20% and can break feasibility |
 | e12 | twenty random draws: TAS control identical in every draw, baselines vary widely with placement |
-| e13 | the extra capacity of a burst port appears in both classes and grows with device-queue size |
+| e13 | the extra capacity of a burst port appears in both classes and grows with device-queue size, up to the qdisc's pacing limit |
+| e14 | the capacity mechanism, predicted before the runs: at 100 Mbps the pacing limit gives 27 frames per cycle at every device-queue size; one frame above capacity, each switch holds back one frame per cycle |
+
+Captures: `figs` (the paper's figures) and `figs_e14` (one e14 configuration on every port of the path) are run only by name.
 
 Summaries: `tools/frontier.py results_e7 results_e8` (largest feasible control burst per shaper and deadline, and the
 joint map) and `tools/uncertainty.py results_e12` (means with 95% intervals, and the share of runs with a late frame).
@@ -101,7 +104,7 @@ joint map) and `tools/uncertainty.py results_e12` (means with 95% intervals, and
 `tools/verify_reproducibility.sh` rebuilds everything from scratch and checks it against `tools/reference/`:
 
 ```bash
-tools/verify_reproducibility.sh            # all 684 runs, about 19 h serially
+tools/verify_reproducibility.sh            # all 691 runs, about 20 h serially
 tools/verify_reproducibility.sh --quick    # e1, e6, e9 and the captures, about 40 min
 ```
 
@@ -122,8 +125,9 @@ Scope matters for each; they are not general laws.
 
 1. **Latency under TAS (aligned, backlog-free):** last frame of a burst of B has latency (B − 1) × frame time + hops × (frame time + link delay).
 2. **Alignment tolerance:** an offset error of ε per hop (systematic drift) fits while (hops − 1) × ε ≤ window − frame time. Independent per-port errors do not accumulate; at 16 switches and a 5 µs window misses become likely above about 1 µs standard deviation.
-3. **Capacity at a port where an application enqueues a burst:** ⌊(W − d) ÷ frame time⌋ + 1 + q frames per cycle, with d the frame's time at its qdisc size and q the device-queue size. Exact at q = 1, 2, 4; two frames short at q = 8.
-4. **Consensus window feasibility:** the whole frames per cycle the window holds (strict fit, K × ⌊(window ÷ K) ÷ frame⌋ with K slices) must cover the busiest link's frames per round divided by cycles per round. Matched 25 of 25 cases, with 7 predicted in advance, and did not change with device-queue size. It is an observed pattern; why consensus ports differ from burst ports is untested.
+3. **Capacity of a backlogged TAS port (this TAS module):** min(⌊(W − d) ÷ τ⌋ + 1 + q, ⌊(W − d) ÷ d⌋ + 1) frames per cycle, with τ the frame time on the wire, d the frame time at its network-layer size (no PPP header), which the qdisc uses both for its fit test and to pace its dequeues, and q the device-queue size. The first term counts frames that leave through the device queue after the gate closes; the second is the pacing limit. Exact in e6, e13, e14 and the overload capture; it is why small control frames gain extra frames per window and large consensus frames do not.
+   **One frame above capacity** (B = ⌊W ÷ τ⌋ + 1 on an aligned path): every frame is delivered, but each switch holds back one frame per cycle, so n frames per cycle are late with n switches (e6, e14).
+4. **Consensus window feasibility:** the whole frames per cycle the window holds (strict fit, K × ⌊(window ÷ K) ÷ frame⌋ with K slices) must cover the busiest link's frames per round divided by cycles per round. Classified all 78 TAS configurations of the paper correctly (65 feasible, 13 not) and did not change with device-queue size. It is an observed pattern, not a derived one.
 5. **Priority:** worst-case control latency is at most (switches + 1) × hop time + (q + 1) × switches × consensus frame time, and the measured baseline uses the ns-3 minimum of q = 1.
 
 ## Reproduction anchors
@@ -140,12 +144,14 @@ At `--ctrlPeriod=1000us --stopAt=6.0s`, `--run=1`, from the original runs:
 | e9 | 16 switches, 5 µs window: ε = 260 ns passes, ε = 270 ns misses |
 | e10 | priority at 16 switches: 197.72 µs at q = 1, 483.10 µs at q = 8; TAS 14.484 µs; FIFO 550.56 µs |
 | e12 part (b) | TAS control max 82.12 µs in all 20 draws |
+| e14 | 100 Mbps, B = 40: 145800 received (27 per cycle) at q = 1, 2, 4, 8; B = 266 at 8, 12, 16 switches: 266 per cycle, 43200, 64800, 86400 late |
 
 ## Known limits and open points
 
 - One chain topology and one control-flow shape. Consensus is simplified: fixed leader, no view change, no failures, no ledger.
 - The priority and FIFO baselines use a one-packet device queue, the ns-3 minimum, which adds blocking a hardware scheduler would not have (e10).
-- A run exactly at a window's capacity keeps a four-frame backlog that never drains; run one frame below. The cause is unexplained, as is the two-frame gap at q = 8.
+- Capacity above the window's limit (rule 3) is a property of this TAS module, not of IEEE 802.1Qbv; a hardware port may release a different number of frames.
+- Run logs do not record `--devQueue`; the cell names do (e10, e13, e14).
 - The TAS module covers gate scheduling only: no 802.1AS synchronisation, preemption, per-stream filtering or central configuration.
 - `--jobs` in `sweep.sh` is untested against `./ns3 run`; serial runs are the safe default.
 
