@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this software, please cite the release you used, as below."
 type: software
 title: "iiot-tsn-consensus: packet-level simulation of PBFT-style consensus traffic sharing an IEEE 802.1Qbv network with a control loop"
-version: 1.0.1
+version: 1.1.0
 date-released: 2026-11-20
 license: MIT
 doi: 10.5281/zenodo.24384364

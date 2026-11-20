@@ -33,6 +33,8 @@ PROG="${PROG:-iiot-consensus-tsn}"
 OUT="${OUT:-results_rounds}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$OUT/log" "$OUT/pcap" "$OUT/check"
+# Build once; the runs use --no-build so their logs hold only the simulator's output.
+"$NS3" build "$PROG" > /dev/null 2>&1 || { echo "building $PROG failed; run: $NS3 build $PROG" >&2; exit 1; }
 CAP="--pcapPoints=validators --pcapMode=rx --pcapStart=0.5s --pcapStop=5.9s"
 [[ -f "$OUT/check.txt" ]] || printf '%-40s %7s %12s %10s %12s %10s %9s\n' run rounds 'tail max us' 'T_con us' 'slack us' 'late rnds' tails > "$OUT/check.txt"
 
@@ -114,7 +116,7 @@ for entry in "${RUNS[@]}"; do
   IFS='|' read -r label iv flags <<< "$entry"
   if grep -q "^$label " "$OUT/check.txt"; then echo "done  [$i/${#RUNS[@]}] $label"; continue; fi
   echo "run   [$i/${#RUNS[@]}] $label"
-  if ! "$NS3" run "$PROG $flags $CAP --pcapPrefix=$OUT/pcap/$label" > "$OUT/log/$label.log" 2>&1; then
+  if ! "$NS3" run --no-build "$PROG $flags $CAP --pcapPrefix=$OUT/pcap/$label" > "$OUT/log/$label.log" 2>&1; then
     echo "FAIL  $label -- see $OUT/log/$label.log"; continue
   fi
   grep -qi "budget" "$OUT/log/$label.log" && echo "WARN  $label: capture budget reached, see its log"

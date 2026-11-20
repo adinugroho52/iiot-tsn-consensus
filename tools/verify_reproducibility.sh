@@ -257,7 +257,7 @@ if [[ $CHECK_ONLY -eq 0 ]]; then
   step "4. repository tests and smoke test"
   ( cd "$REPO" && tests/schedule_test.sh > "$WORK/schedule_test.log" 2>&1 ) && echo "ok    tests/schedule_test.sh" || die "tests/schedule_test.sh failed, see $WORK/schedule_test.log"
   ( cd "$REPO" && tests/check_sweep.sh   > "$WORK/check_sweep.log" 2>&1 )   && echo "ok    tests/check_sweep.sh"   || die "tests/check_sweep.sh failed, see $WORK/check_sweep.log"
-  ( cd "$NS3_DIR" && ./ns3 run "iiot-consensus-tsn --stopAt=0.7s --run=1" > "$WORK/smoke.log" 2>&1 ) || die "smoke run failed, see $WORK/smoke.log"
+  ( cd "$NS3_DIR" && ./ns3 run --no-build "iiot-consensus-tsn --stopAt=0.7s --run=1" > "$WORK/smoke.log" 2>&1 ) || die "smoke run failed, see $WORK/smoke.log"
   smoke_ok=1
   for k in min mean p99 max; do
     v="$(awk -v k="$k" '/=== control loop/{f=1} f && $1==k {print $2; exit}' "$WORK/smoke.log")"

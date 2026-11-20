@@ -201,18 +201,20 @@ private:
 
   void Broadcast(MsgType t, uint32_t round, int64_t startNs)
   {
-    // Zero first so the struct's alignment padding is deterministic; captures are then
-    // byte-identical across machines.
+    // Zero first so the struct's alignment padding is deterministic, and build the whole
+    // message in a zeroed buffer: Packet::AddPaddingAtEnd() leaves the bytes it adds
+    // uninitialised. Captures are then byte-identical across machines.
     Hdr h;
     std::memset(&h, 0, sizeof(h));
     h.type = static_cast<uint8_t>(t);
     h.round = round;
     h.sender = m_self;
     h.startNs = startNs;
+    std::vector<uint8_t> buf(std::max<uint32_t>(m_msgSize, sizeof(h)), 0);
+    std::memcpy(buf.data(), &h, sizeof(h));
     for (auto& s : m_txSockets)
       {
-        Ptr<Packet> p = Create<Packet>(reinterpret_cast<const uint8_t*>(&h), sizeof(h));
-        if (m_msgSize > sizeof(h)) p->AddPaddingAtEnd(m_msgSize - sizeof(h));
+        Ptr<Packet> p = Create<Packet>(buf.data(), buf.size());
         s->Send(p);
         m_msgsSent++;
       }

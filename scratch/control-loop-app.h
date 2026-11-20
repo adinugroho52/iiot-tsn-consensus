@@ -106,8 +106,12 @@ private:
         std::memset(&p, 0, sizeof(p));   // deterministic padding bytes
         p.seq = m_seq++;
         p.txNs = Simulator::Now().GetNanoSeconds();
-        Ptr<Packet> pkt = Create<Packet>(reinterpret_cast<const uint8_t*>(&p), sizeof(p));
-        if (m_bytes > sizeof(p)) pkt->AddPaddingAtEnd(m_bytes - sizeof(p));
+        // The whole payload is built in a zeroed buffer: Packet::AddPaddingAtEnd()
+        // leaves the bytes it adds uninitialised, so padding added that way holds
+        // whatever was in memory and differs from machine to machine.
+        std::vector<uint8_t> buf(m_bytes, 0);
+        std::memcpy(buf.data(), &p, sizeof(p));
+        Ptr<Packet> pkt = Create<Packet>(buf.data(), m_bytes);
         m_sock->Send(pkt);
       }
     // Fixed-period rescheduling so the cadence never drifts.

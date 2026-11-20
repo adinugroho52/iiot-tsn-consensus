@@ -50,3 +50,11 @@ The code and reference results behind the submitted manuscript, archived on Zeno
 ## v1.0.1 (2026-11-20)
 
 - Records the Zenodo DOIs: v1.0.0 is 10.5281/zenodo.24384365; all versions, 10.5281/zenodo.24384364. Documentation only; no code or reference results changed.
+
+## v1.1.0 (2026-11-20)
+
+Captures and run logs are now byte-identical across machines. No result changes: every summary statistic, run log, per-frame CSV and frame timing is the same as in v1.0.0.
+
+- Packets are built in a zeroed buffer. `Packet::AddPaddingAtEnd()` leaves the bytes it adds uninitialised, so the padding after the control and consensus payload structs held leftover memory that differed between machines. Every other byte of every frame was already identical (checked against a v1.0.0 rerun on a second machine: 92 capture files, 32,401 frames).
+- `tools/sweep.sh` and `tools/round_check.sh` build the program once and run each simulation with `./ns3 run --no-build`, as does the smoke test in `tools/verify_reproducibility.sh`. With Ninja, `./ns3 run` printed two build-tool lines at the top of every log.
+- `tools/reference/figs`, `figs_c005_8sw` and `figs_e14`: new checksums for 76 capture files. Their summaries and every other checksum are unchanged.

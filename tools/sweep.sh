@@ -98,6 +98,12 @@ COMMON=(--ctrlPeriod="$CTRL_PERIOD" --stopAt="$STOPAT")
 [[ -n "$LINK_RATE" ]] && COMMON+=(--linkRate="$LINK_RATE")
 [[ -n "$CTRL_FRAC"  ]] && COMMON+=(--ctrlFrac="$CTRL_FRAC")
 [[ -n "$SHAPER"     ]] && COMMON+=(--shaper="$SHAPER")
+
+# Build once up front. Every run then uses --no-build, so a run log holds only the
+# simulator's output, whichever build tool (Make or Ninja) ns-3 was configured with.
+if [[ $DRY -eq 0 && $LIST -eq 0 ]]; then
+  "$NS3" build "$PROG" > /dev/null 2>&1 || { echo "building $PROG failed; run: $NS3 build $PROG" >&2; exit 1; }
+fi
 [[ ${#EXTRA[@]} -gt 0 ]] && COMMON+=("${EXTRA[@]}")
 
 mkdir -p "$CSV" "$LOG" "$PCAP"
@@ -191,7 +197,7 @@ run_cell() {
 
   local t0 t1 rc
   t0=$(date +%s)
-  "$NS3" run "${args[*]}" > "$logf" 2>&1
+  "$NS3" run --no-build "${args[*]}" > "$logf" 2>&1
   rc=$?
   if [[ $rc -ne 0 ]]; then
     echo "$cell (exit $rc)" >> "$FAILED"
@@ -629,7 +635,7 @@ if wants figs; then
     if [[ $DRY -eq 1 ]]; then
       printf '%s run "%s %s"\n' "$NS3" "$PROG" "$*"; return
     fi
-    if "$NS3" run "$PROG $*" > "$logf" 2>&1; then echo "ok    $name"
+    if "$NS3" run --no-build "$PROG $*" > "$logf" 2>&1; then echo "ok    $name"
     else echo "$name" >> "$FAILED"; echo "FAIL  $name -- see $logf" >&2; fi
   }
 
@@ -658,7 +664,7 @@ if wants figs_e14; then
   if [[ $LIST -eq 1 ]]; then echo "  fig   fig-e14"
   elif [[ $DRY -eq 1 ]]; then
     printf '%s run "%s %s"\n' "$NS3" "$PROG" "${COMMON[*]} --run=1 --linkRate=100Mbps --ctrlTos=16 --devQueue=8p --ctrlBurst=40 --ctrlFrac=0.2 --consFrac=0.2 --nSwitches=4 --nValidators=4 --consensusMsgSize=256 --pcapPoints=path --pcapStart=0.5s --pcapStop=0.52s --pcapPrefix=$PCAP/fig-e14"
-  elif "$NS3" run "$PROG ${COMMON[*]} --run=1 --linkRate=100Mbps --ctrlTos=16 --devQueue=8p \
+  elif "$NS3" run --no-build "$PROG ${COMMON[*]} --run=1 --linkRate=100Mbps --ctrlTos=16 --devQueue=8p \
       --ctrlBurst=40 --ctrlFrac=0.2 --consFrac=0.2 --nSwitches=4 --nValidators=4 \
       --consensusMsgSize=256 --pcapPoints=path --pcapStart=0.5s --pcapStop=0.52s \
       --pcapPrefix=$PCAP/fig-e14" > "$LOG/fig-e14.log" 2>&1; then echo "ok    fig-e14"
