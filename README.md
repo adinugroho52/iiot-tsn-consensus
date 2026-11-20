@@ -85,6 +85,7 @@ LICENSE.md                                                          MIT Licence
 | `--nInjectors`, `--injectClass`, `--injectFrame`, `--injectBurst`, `--injectInterval` | 0, `control`, 1024 B, 4, 200 µs | injectors at switch 0 sending to the IO device, with `--attack=inject` |
 | `--adversaryCsv` | off | per-round safety and liveness detail from the oracle |
 | `--pcap*` | off | see `docs/CAPTURES.md` |
+| `--reproposeWindow` | 0 | Full model: on a view change, re-propose only uncommitted rounds from the last N round ticks and abandon older ones (PBFT log watermarks). 0 = all held rounds (up to 64). |
 
 `./ns3 run "iiot-consensus-tsn --PrintHelp"` lists everything. The model is deterministic unless a random option is on.
 

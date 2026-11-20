@@ -290,6 +290,38 @@ class ConsensusOracle : public SimpleRefCount<ConsensusOracle>
         }
     }
 
+    /** Called by a trusted node that abandons an uncommitted round at a view change. */
+    void NoteAbandoned(uint32_t round)
+    {
+        // Only rounds already known: an entry made here would show up in the CSV.
+        auto it = m_rounds.find(round);
+        if (it != m_rounds.end())
+        {
+            it->second.abandoned = true;
+        }
+    }
+
+    /** Opened rounds that some trusted node abandoned and that never reached a quorum. */
+    uint32_t RoundsAbandoned(uint32_t quorum) const
+    {
+        uint32_t k = 0;
+        for (const auto& kv : m_rounds)
+        {
+            const Round& r = kv.second;
+            if (r.openedNs < 0 || !r.abandoned)
+            {
+                continue;
+            }
+            bool complete = false;
+            for (const auto& d : r.byDigest)
+            {
+                complete = complete || d.second.size() >= quorum;
+            }
+            k += complete ? 0 : 1;
+        }
+        return k;
+    }
+
     void NoteViewChange(uint32_t /*node*/, uint32_t toView)
     {
         m_viewChanges++;
@@ -415,6 +447,7 @@ class ConsensusOracle : public SimpleRefCount<ConsensusOracle>
         int64_t firstCommitNs{-1};
         int64_t lastCommitNs{-1};
         bool violated{false};
+        bool abandoned{false};
         std::map<uint32_t, std::set<uint32_t>> byDigest;
     };
 

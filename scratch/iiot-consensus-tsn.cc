@@ -183,6 +183,18 @@ public:
     m_nvSize = newViewSize;
   }
 
+  /**
+   * How far back a new primary re-proposes (full model). On entering a view,
+   * every node abandons the uncommitted rounds more than k round ticks old:
+   * the new primary does not re-propose them and backups stop timing them.
+   * This stands in for PBFT's log watermarks (the window between checkpoints);
+   * real systems hand such requests back to the client. 0 = re-propose every
+   * uncommitted round still held (the most recent 64), the behaviour before
+   * this option existed.
+   */
+  void SetReproposeWindow(uint32_t k) { m_reproposeWindow = k; }
+  uint32_t GetAbandoned() const { return m_abandoned; }
+
   /** Make this node Byzantine (full model). bits: AdvBit mask from adversary.h. */
   void SetAdversary(uint32_t bits, Time start, Time stop, uint32_t floodFactor, Time attackDelay)
   {
@@ -194,6 +206,13 @@ public:
   }
   void SetOracle(Ptr<ConsensusOracle> o) { m_oracle = o; }
   bool IsByzantine() const { return IsValidatorAttack(m_adv); }
+  /**
+   * Whether the oracle takes this node's word. A node whose only fault is a
+   * crash never sends anything false (crash-recovery model), so its commits
+   * count toward agreement and quorum once it is back; a node with any other
+   * behaviour is excluded for the whole run.
+   */
+  bool Trusted() const { return !IsValidatorAttack(m_adv & ~ADV_CRASH); }
   uint32_t GetMismarked()     const { return m_mismarked; }
   uint32_t GetFloodExtra()    const { return m_floodExtra; }
   uint32_t GetEquivocations() const { return m_equivocations; }
@@ -244,6 +263,7 @@ private:
     uint32_t proposed{0};
     bool haveProposal{false};
     bool timerArmed{false};
+    bool abandoned{false};             // dropped at a view change (--reproposeWindow)
     EventId timer;
     // both
     int64_t startNs{-1};
@@ -365,7 +385,7 @@ private:
   /** Keep the round map bounded in long runs (v1: called by the primary only). */
   void PruneOldRounds()
   {
-    const uint32_t keep = m_full ? 64 : 16;
+    const uint32_t keep = m_full ? std::max<uint32_t>(64, m_reproposeWindow) : 16;
     while (m_rounds.size() > keep)
       {
         m_rounds.begin()->second.timer.Cancel();
@@ -391,7 +411,7 @@ private:
   {
     RoundState& rs = m_rounds[round];
     if (rs.startNs < 0) rs.startNs = Simulator::Now().GetNanoSeconds();
-    if (rs.committed || rs.haveProposal) return;
+    if (rs.committed || rs.haveProposal || rs.abandoned) return;
     if (Acts(ADV_CRASH)) return;               // a crashed primary opens nothing
     if (m_oracle) m_oracle->NoteRoundOpened(round, rs.startNs);
     rs.proposed = HonestDigest(round);
@@ -441,7 +461,7 @@ private:
 
     RoundState& rs = m_rounds[h.round];
     if (rs.startNs < 0) rs.startNs = h.startNs;
-    if (rs.committed) return;
+    if (rs.committed || rs.abandoned) return;
 
     switch (h.type)
       {
@@ -455,6 +475,9 @@ private:
             rs.sentPrepare = true;
             Broadcast(PREPARE, h.round, rs.startNs, m_view, rs.proposed);
             m_sentPrepare++;
+            // A backup's own PREPARE is in its log and counts toward the 2f
+            // (Castro-Liskov). Without it, one silent backup stops every round.
+            rs.preparesBy[rs.proposed].insert(m_self);
           }
         // PREPAREs and COMMITs may have arrived before the PRE-PREPARE (it can
         // wait for a gate that the others pass): count them now.
@@ -502,7 +525,7 @@ private:
   {
     if (!m_vcEnabled) return;
     RoundState& rs = m_rounds[round];
-    if (rs.committed || rs.timerArmed) return;
+    if (rs.committed || rs.timerArmed || rs.abandoned) return;
     rs.timerArmed = true;
     rs.timer = Simulator::Schedule(m_viewTimeout, &ConsensusApp::OnViewTimeout, this, round);
   }
@@ -531,7 +554,37 @@ private:
     uint32_t target = h.digest;
     if (target <= m_view) return;
     m_viewVotes[target].insert(h.sender);
+    MaybeJoin();
     MaybeEnterView(target);
+  }
+
+  /**
+   * Castro-Liskov's liveness rule: VIEW-CHANGEs from f+1 other nodes for views
+   * above this one include a correct node, so join the smallest of those views
+   * without waiting for a timer. Without it a primary (which arms no timers) or
+   * a node that recovered late never votes, and with f nodes silent the other
+   * 2f cannot reach 2f+1 on their own.
+   */
+  void MaybeJoin()
+  {
+    if (!m_vcEnabled || Acts(ADV_CRASH) || Acts(ADV_WITHHOLD)) return;
+    if (m_viewsEntered >= m_maxViews) return;
+    std::set<uint32_t> senders;
+    uint32_t smallest = 0;
+    for (auto it = m_viewVotes.upper_bound(m_view); it != m_viewVotes.end(); ++it)
+      for (uint32_t s : it->second)
+        if (s != m_self)
+          {
+            senders.insert(s);
+            if (!smallest) smallest = it->first;
+          }
+    if (senders.size() < m_f + 1 || m_requestedView >= smallest) return;
+    m_requestedView = smallest;
+    Broadcast(VIEW_CHANGE, m_expected, Simulator::Now().GetNanoSeconds(), m_view, smallest,
+              m_vcSize);
+    m_sentViewChange++;
+    m_viewVotes[smallest].insert(m_self);
+    MaybeEnterView(smallest);
   }
 
   void MaybeEnterView(uint32_t target)
@@ -544,7 +597,8 @@ private:
         Broadcast(NEW_VIEW, m_expected, Simulator::Now().GetNanoSeconds(), m_view, 0, m_nvSize);
         m_sentNewView++;
         std::vector<uint32_t> open;
-        for (auto& kv : m_rounds) if (!kv.second.committed) open.push_back(kv.first);
+        for (auto& kv : m_rounds)
+          if (!kv.second.committed && !kv.second.abandoned) open.push_back(kv.first);
         for (uint32_t r : open) Propose(r);
       }
   }
@@ -561,15 +615,27 @@ private:
     m_view = v;
     m_viewsEntered++;
     m_requestedView = 0;
-    if (m_oracle && !IsByzantine()) m_oracle->NoteViewChange(m_self, v);
+    if (m_oracle && Trusted()) m_oracle->NoteViewChange(m_self, v);
     m_futureFrom.erase(m_futureFrom.begin(), m_futureFrom.upper_bound(v));
     // Exponential backoff (Castro-Liskov); reset by the next commit.
     m_viewTimeout = m_viewTimeout * m_viewBackoff;
+    // Rounds at or below the cutoff fall outside the re-proposal window.
+    const uint32_t cutoff = (m_reproposeWindow && m_expected > m_reproposeWindow)
+                                ? m_expected - m_reproposeWindow : 0;
     // Votes are per view; round identity and start time carry over.
     for (auto& kv : m_rounds)
       {
         RoundState& rs = kv.second;
-        if (rs.committed) continue;
+        if (rs.committed || rs.abandoned) continue;
+        if (kv.first <= cutoff)
+          {
+            rs.abandoned = true;
+            rs.timer.Cancel();
+            rs.timerArmed = false;
+            m_abandoned++;
+            if (m_oracle && Trusted()) m_oracle->NoteAbandoned(kv.first);
+            continue;
+          }
         rs.preparesBy.clear();
         rs.commitsBy.clear();
         rs.sentPrepare = false;
@@ -596,7 +662,7 @@ private:
   {
     m_committed++;
     // Only correct nodes file commits: safety is agreement among correct nodes.
-    if (m_oracle && !IsByzantine())
+    if (m_oracle && Trusted())
       m_oracle->NoteCommit(round, m_self, rs.proposed, Simulator::Now().GetNanoSeconds());
     // Time from the round first being opened (across view changes) to this
     // node committing it. This is the metric that moves under gate
@@ -716,6 +782,7 @@ private:
 
   uint32_t m_sentPrePrepare{0}, m_sentPrepare{0}, m_sentCommit{0};
   uint32_t m_sentViewChange{0}, m_sentNewView{0}, m_overtaken{0};
+  uint32_t m_reproposeWindow{0}, m_abandoned{0};
   uint32_t m_committed{0}, m_msgsSent{0};
   int64_t  m_latSum{0}, m_latMax{0};
   std::vector<int64_t> m_latSamples;
@@ -879,6 +946,7 @@ int main(int argc, char* argv[])
   Time     viewTimeout = Seconds(-1);   // negative: 4 x consensusInterval
   double   viewBackoff = 2.0;
   uint32_t maxViewChanges = 64;
+  uint32_t reproposeWindow = 0;
   uint32_t viewChangeSize = 0;          // 0: consensusMsgSize
   uint32_t newViewSize = 0;             // 0: consensusMsgSize
   bool     pbftStats = false;
@@ -1032,6 +1100,11 @@ int main(int argc, char* argv[])
   cmd.AddValue("viewBackoff", "full model: timeout multiplier per view entered, reset by a commit",
                viewBackoff);
   cmd.AddValue("maxViewChanges", "full model: views a node may enter in one run", maxViewChanges);
+  cmd.AddValue("reproposeWindow",
+               "full model: on a view change, re-propose only uncommitted rounds opened in "
+               "the last N round ticks and abandon older ones (PBFT's log watermarks). "
+               "0 = every uncommitted round still held (the most recent 64)",
+               reproposeWindow);
   cmd.AddValue("viewChangeSize", "full model: VIEW-CHANGE size in bytes (0 = consensusMsgSize)",
                viewChangeSize);
   cmd.AddValue("newViewSize", "full model: NEW-VIEW size in bytes (0 = consensusMsgSize)",
@@ -1103,6 +1176,18 @@ int main(int argc, char* argv[])
                              PcapTapSet::MODE_TX;
   NS_ABORT_MSG_IF(pcapMode != "tx" && pcapMode != "rx" && pcapMode != "both",
                   "--pcapMode must be tx, rx or both");
+
+  // The attack is parsed before the network is built: --attack=inject decides
+  // how many injector nodes exist.
+  uint32_t advBits = ADV_NONE;
+  {
+    std::string bad;
+    NS_ABORT_MSG_IF(!ParseAttack(attackSpec, advBits, bad),
+                    "unknown --attack behaviour \"" << bad << "\"");
+  }
+  if (IsValidatorAttack(advBits) && nByzantine == 0) nByzantine = 1;
+  if ((advBits & ADV_INJECT) && nInjectors == 0) nInjectors = 1;
+  if (!(advBits & ADV_INJECT)) nInjectors = 0;
 
   RngSeedManager::SetSeed(1);
   RngSeedManager::SetRun(runId);
@@ -1207,15 +1292,6 @@ int main(int argc, char* argv[])
   NS_ABORT_MSG_IF(viewBackoff < 1.0, "--viewBackoff must be at least 1.0");
   NS_ABORT_MSG_IF((viewChangeSize && viewChangeSize < 32) || (newViewSize && newViewSize < 32),
                   "--viewChangeSize and --newViewSize must be 0 or at least 32 B");
-  uint32_t advBits = ADV_NONE;
-  {
-    std::string bad;
-    NS_ABORT_MSG_IF(!ParseAttack(attackSpec, advBits, bad),
-                    "unknown --attack behaviour \"" << bad << "\"");
-  }
-  if (IsValidatorAttack(advBits) && nByzantine == 0) nByzantine = 1;
-  if ((advBits & ADV_INJECT) && nInjectors == 0) nInjectors = 1;
-  if (!(advBits & ADV_INJECT)) nInjectors = 0;
   NS_ABORT_MSG_IF(IsValidatorAttack(advBits) && !fullModel,
                   "validator behaviours need --pbftModel=full");
   NS_ABORT_MSG_IF(nByzantine > nValidators, "--nByzantine exceeds --nValidators");
@@ -1508,6 +1584,7 @@ int main(int argc, char* argv[])
         {
           app->SetFullModel(viewChange, viewTimeout, viewBackoff, maxViewChanges,
                             viewChangeSize, newViewSize);
+          app->SetReproposeWindow(reproposeWindow);
           app->SetOracle(oracle);
           if (byzantine.count(i))
             app->SetAdversary(advBits & ~ADV_INJECT, attackStart, attackStop, floodFactor,
@@ -1676,12 +1753,13 @@ int main(int argc, char* argv[])
 
   if (fullModel || pbftStats)
     {
-      uint32_t vcs = 0, nvs = 0, over = 0, entered = 0, viewMax = 0;
+      uint32_t vcs = 0, nvs = 0, over = 0, entered = 0, viewMax = 0, aband = 0;
       for (auto& a : consensusApps)
         {
           vcs += a->GetSentViewChange();
           nvs += a->GetSentNewView();
           over += a->GetOvertaken();
+          aband += a->GetAbandoned();
           entered += a->GetViewsEntered();
           viewMax = std::max(viewMax, a->GetView());
         }
@@ -1698,6 +1776,10 @@ int main(int argc, char* argv[])
                 << "  views entered       " << entered << "  (highest view " << viewMax << ")\n"
                 << "  prepares before pre-prepare  " << over
                 << "  node-rounds with PREPAREs from 2f senders before the PRE-PREPARE\n";
+      // Printed only when set, so default full-model logs are unchanged.
+      if (fullModel && reproposeWindow > 0)
+        std::cout << "  re-propose window   " << reproposeWindow << " rounds  ("
+                  << aband << " node-rounds abandoned at view changes)\n";
     }
 
   if (advBits != ADV_NONE)
@@ -1738,10 +1820,14 @@ int main(int argc, char* argv[])
           uint32_t q = 2 * ((n - 1) / 3) + 1;
           std::cout << "  rounds opened       " << oracle->RoundsOpened() << "\n"
                     << "  rounds with commit  " << oracle->RoundsWithAnyCommit()
-                    << "  (any correct node)\n"
+                    << "  (any trusted node)\n"
                     << "  rounds quorum-done  " << oracle->QuorumComplete(q)
-                    << "  (2f+1 correct nodes, same digest)\n"
+                    << "  (2f+1 trusted nodes, same digest; crash-only nodes are trusted)\n"
                     << "  safety violations   " << oracle->SafetyViolations() << "\n"
+                    << (reproposeWindow > 0
+                            ? "  rounds abandoned    " + std::to_string(oracle->RoundsAbandoned(q)) +
+                                  "  (outside the re-propose window, never quorum-done)\n"
+                            : std::string())
                     << "  longest stall       "
                     << oracle->MaxStallNs((stopAt - cooldown).GetNanoSeconds()) / 1000.0
                     << " us\n";

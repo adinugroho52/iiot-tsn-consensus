@@ -68,3 +68,7 @@ Captures and run logs are now byte-identical across machines. No result changes:
 - A node that sees messages of a higher view from f+1 distinct senders moves to that view, standing in for state transfer: without it a validator that was crashed could not rejoin.
 - `tools/iiot-tsn-dissector.lua` decodes VIEW-CHANGE, NEW-VIEW, view and digest, and flags consensus messages sent at the control codepoint (`iiotbft.mismarked == 1`).
 - `tools/adversary_check.sh`: twelve short runs, each with its expected outcome, for the full model and every behaviour.
+- Full model: backups count their own PREPARE; f+1 VIEW-CHANGE join rule (Castro–Liskov).
+- Oracle trusts crash-only nodes (crash-recovery model).
+- Fixed: `--attack=inject` crashed (injectors were built before the attack was parsed).
+- New option `--reproposeWindow` (default 0, behaviour unchanged).

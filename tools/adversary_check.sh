@@ -4,7 +4,7 @@
 #
 # Run from the ns-3 root, like tools/sweep.sh, after building iiot-consensus-tsn:
 #
-#     tools/adversary_check.sh            # all scenarios, about 5 minutes
+#     tools/adversary_check.sh            # all 13 scenarios, about 5 minutes
 #     tools/adversary_check.sh crash1     # one scenario by name
 #
 # Each scenario is one short run (4 s, attack window [1.0 s, 2.5 s), so 1.5 s of
@@ -185,6 +185,24 @@ if sel shorttimeout; then
     check shorttimeout "view changes happen (views entered > 0)" 'ge "$(get "$L" "^  views entered" 3)" 1'
     check shorttimeout "all node-rounds committed ($c of $((r*4)))" 'all "$c" "$((r*4))" 4'
     echo "        msgs/round $(get "$L" '^  msgs/round actual' 3) (24 without view changes)"
+  fi
+fi
+
+# --- 13. bounded re-proposal window ------------------------------------------
+# --reproposeWindow=N: at a view change, uncommitted rounds more than N ticks old
+# are abandoned instead of re-proposed. Equivocation is the case where they were
+# actually proposed (a crashed primary proposes nothing), so the oracle can tell
+# an abandoned round from a committed one.
+if sel window; then
+  echo "window: n=4, the primary equivocates, --reproposeWindow=2. Expect the forked rounds older than 2 ticks to be abandoned at the view change, every other opened round quorum-done, and no safety violation."
+  if run window --attack=equivocate --reproposeWindow=2 $WIN; then
+    o=$(get "$L" '^  rounds opened' 3); q=$(get "$L" '^  rounds quorum-done' 3); a=$(get "$L" '^  rounds abandoned' 3)
+    nr=$(grep -m1 '^  re-propose window' "$L" | sed 's/.*(\([0-9]*\) node-rounds.*/\1/')
+    check window "rounds abandoned > 0 ($a)" 'ge "$a" 1'
+    check window "node-rounds abandoned > 0 ($nr)" 'ge "$nr" 1'
+    check window "opened = quorum-done + abandoned ($o = $q + $a, one round may be in flight)" 'all "$((q+a))" "$o" 1'
+    check window "no safety violation" '[[ "$(get "$L" "^  safety violations" 3)" == 0 ]]'
+    summary "$L"
   fi
 fi
 
