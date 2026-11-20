@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the release you used, as below."
+type: software
+title: "iiot-tsn-consensus: packet-level simulation of PBFT-style consensus traffic sharing an IEEE 802.1Qbv network with a control loop"
+version: 1.0.1
+date-released: 2026-11-20
+license: MIT
+doi: 10.5281/zenodo.24384364
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.24384365
+    description: "v1.0.0, the release behind the paper's results"
+repository-code: "https://github.com/adinugroho52/iiot-tsn-consensus"
+authors:
+  - given-names: Adi
+    family-names: Nugroho
+    affiliation: Universitas Indonesia
+    orcid: "https://orcid.org/0009-0007-2206-3829"
+  - given-names: Riri Fitri
+    family-names: Sari
+    affiliation: Universitas Indonesia
+    orcid: "https://orcid.org/0000-0002-8841-8078"
+keywords:
+  - ns-3
+  - Time-Sensitive Networking
+  - IEEE 802.1Qbv
+  - time-aware shaper
+  - PBFT
+  - consensus
+  - industrial IoT
+abstract: >-
+  An ns-3 simulation of PBFT-style consensus traffic sharing a Time-Sensitive
+  Networking (IEEE 802.1Qbv) chain with a periodic control loop, comparing the
+  time-aware shaper, strict priority and FIFO scheduling. Includes the
+  experiment driver, analysis scripts, a Wireshark dissector and a
+  reproducibility script that checks every run against reference results.

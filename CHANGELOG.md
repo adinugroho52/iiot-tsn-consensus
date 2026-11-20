@@ -38,3 +38,15 @@ Development stages, oldest first. The repository holds the merged result.
 - Added experiment `e15` (6 runs) to `sweep.sh`: configurations placed just inside and just outside the limit of rule 4, with the predicted outcome of each in the block comment. The counting rule now covers 84 TAS configurations (68 feasible, 16 not).
 - `tests/check_sweep.sh` and `tools/verify_reproducibility.sh` cover `e15`; the paper now has 697 runs (about 20 h serially).
 - `tools/reference/e15` holds the summaries and run-log checksums of `e15`, from runs on ns-3.49 with the TAS module at commit `3d00954`. Its runs also write per-frame and per-commit CSVs, which the reference does not list; `tools/compare_reference.py make` adds their checksums from any run. The simulator source and every other reference set are unchanged.
+
+## v1.0.0 (2026-11-20)
+
+The code and reference results behind the submitted manuscript, archived on Zenodo.
+
+- Covers experiments `e1`–`e15` and the capture sets `figs` and `figs_e14`: 697 runs, all reproducing `tools/reference/` on ns-3.49 with the TAS module at commit `3d0095446779809896024821451442ed6f01f2be`.
+- Added `CITATION.cff`. The README now names the release, gives the full TAS commit hash, and has a "Citing" section.
+- The simulator source, the tools and the reference results are unchanged from the stages above.
+
+## v1.0.1 (2026-11-20)
+
+- Records the Zenodo DOIs: v1.0.0 is 10.5281/zenodo.24384365; all versions, 10.5281/zenodo.24384364. Documentation only; no code or reference results changed.

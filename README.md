@@ -12,16 +12,17 @@ simulated, not a blockchain.
 
 ## Status
 
-This is the revision the paper's results come from. Built on ns-3.49 with the TAS module at commit `3d00954`, all 697
-runs reproduce the reference results in `tools/reference/` exactly; `tools/verify_reproducibility.sh` repeats that check
-from scratch (see "Reproducing the paper's results" below).
+Release v1.0.0 (Zenodo, DOI [10.5281/zenodo.24384365](https://doi.org/10.5281/zenodo.24384365)) is the revision the paper's results come from. Built on ns-3.49 with the TAS module
+at commit `3d00954`, all 697 runs reproduce the reference results in `tools/reference/` exactly;
+`tools/verify_reproducibility.sh` repeats that check from scratch (see "Reproducing the paper's results" below). Later
+versions are listed in `CHANGELOG.md`.
 
 ## Requirements
 
 - ns-3 with the DenKrysos TAS module in `contrib/tsn` (<https://github.com/DenKrysos/Time-Aware-Shaper-TAS-in-ns-3>).
   This project is built on that module. The reference results were produced on ns-3.49 with the module at commit
-  `3d00954`. `pcap-tap.h` handles both forms of `PcapHelper::CreateFile` (the `DataLinkType` enum up to 3.48, and
-  `uint16_t` after it).
+  `3d0095446779809896024821451442ed6f01f2be` (7 July 2025, short form `3d00954`). `pcap-tap.h` handles both forms of
+  `PcapHelper::CreateFile` (the `DataLinkType` enum up to 3.48, and `uint16_t` after it).
 - `g++` (for the tests), `bash`, `python3` (3.8+; `matplotlib` only for `--plot`). Wireshark is optional.
 - For `tools/verify_reproducibility.sh`: `git`, `cmake` and `make` as well, and network access to clone ns-3 and the
   TAS module.
@@ -50,6 +51,8 @@ tools/     sweep.sh  frontier.py  uncertainty.py  iiot-tsn-dissector.lua
            round_check.sh  round_check.py                            do consensus rounds overlap?
 docs/      CAPTURES.md                                              packet captures and the dissector
 tests/     schedule_test.sh  check_sweep.sh
+CHANGELOG.md                                                        how the code got here, and releases
+CITATION.cff                                                        citation metadata (GitHub and Zenodo)
 LICENSE.md                                                          MIT Licence
 ```
 
@@ -171,6 +174,11 @@ Sonnet 5.5 and Claude Fable 5.2): the simulation, the experiment and analysis sc
 reference check, and this README and the other notes. The authors directed the work, ran every simulation, and
 reviewed the code; the reference results in `tools/reference/` come from those runs, not from the AI system. The
 accompanying paper discloses its own use of AI in its acknowledgment.
+
+## Citing
+
+If you use this code, please cite the release you used. For the paper's results that is v1.0.0, DOI [10.5281/zenodo.24384365](https://doi.org/10.5281/zenodo.24384364). `CITATION.cff` holds the full metadata, and GitHub's "Cite this repository" button formats it. The accompanying paper is under review; this section will give its reference
+once it is published.
 
 ## Licence
 
