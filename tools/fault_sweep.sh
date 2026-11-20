@@ -48,6 +48,10 @@
 #   v1  validation (40 cells): configurations no earlier set used, with the
 #       recovery rule's predictions registered in tools/validation/v1_cells.csv
 #       before the runs (tools/validation_design.py). Only run by name.
+#   v1s Raft seeds (75 cells): the 15 Raft cells of v1 with --run=1..5. Raft's
+#       election timeouts are random, so one run per cell is one draw. Seed 1
+#       repeats v1 exactly. A stochasticity study, not a rescoring of v1.
+#       Only run by name.
 #
 set -uo pipefail
 
@@ -61,8 +65,8 @@ while [[ $# -gt 0 ]]; do
     -j) JOBS="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
     -h|--help) sed -n '2,36p' "$0"; exit 0 ;;
-    f1|f2|f3|f4|f5|p1|p2|p3|v1) SETS+=("$1"); shift ;;
-    *) echo "unknown argument: $1 (sets are f1 f2 f3 f4 f5 p1 p2 p3 v1)" >&2; exit 2 ;;
+    f1|f2|f3|f4|f5|p1|p2|p3|v1|v1s) SETS+=("$1"); shift ;;
+    *) echo "unknown argument: $1 (sets are f1 f2 f3 f4 f5 p1 p2 p3 v1 v1s)" >&2; exit 2 ;;
   esac
 done
 [[ ${#SETS[@]} -eq 0 ]] && SETS=(f1 f2 f3 f4 f5 p1 p2 p3)   # v1 only by name
@@ -337,6 +341,24 @@ if wants p3; then
       pcell p3 raft "$k" crash 2 "--attack=crash $WIN --raftCatchup=$L" "--crash 0" "c$L"
     done
   done
+  wait
+fi
+
+# --- v1s: the Raft validation cells under five seeds -------------------------------------
+if wants v1s; then
+  echo "== v1s: Raft validation cells, seeds 1-5"
+  REG="$TOOLS/validation/v1_cells.csv"
+  [[ -f "$REG" ]] || { echo "missing $REG" >&2; exit 1; }
+  while IFS='|' read -r cell set cfg atk tr win fl; do
+    for seed in 1 2 3 4 5; do
+      launch "v1s-${cell#v1-}-r$seed" v1s "$cfg" "$atk" "$tr" "$win" "" "$fl --run=$seed"
+    done
+  done < <(python3 -I -c '
+import csv, sys
+for r in csv.DictReader(open(sys.argv[1])):
+    if r["config"].startswith("raft"):
+        print("|".join([r["cell"], r["set"], r["config"], r["attack"], r["timeout_rounds"], r["window"], r["flags"]]))
+' "$REG")
   wait
 fi
 

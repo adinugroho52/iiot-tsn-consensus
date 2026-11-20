@@ -2419,7 +2419,9 @@ int main(int argc, char* argv[])
                     << "  rounds with commit  " << oracle->RoundsWithAnyCommit()
                     << "  (any trusted node)\n"
                     << "  rounds quorum-done  " << oracle->QuorumComplete(q)
-                    << "  (2f+1 trusted nodes, same digest; crash-only nodes are trusted)\n"
+                    << (protocol == "raft" ? "  (a majority of trusted nodes, same entry; crash-only "
+                                             "nodes are trusted)\n"
+                                           : "  (2f+1 trusted nodes, same digest; crash-only nodes are trusted)\n")
                     << "  safety violations   " << oracle->SafetyViolations() << "\n"
                     << (reproposeWindow > 0
                             ? "  rounds abandoned    " + std::to_string(oracle->RoundsAbandoned(q)) +
