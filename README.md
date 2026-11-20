@@ -45,10 +45,11 @@ means the build or the tree differs from the one the results came from.
 ## Layout
 
 ```
-scratch/   iiot-consensus-tsn.cc  control-loop-app.h  pcap-tap.h      -> ns-3 scratch/
+scratch/   iiot-consensus-tsn.cc  control-loop-app.h  pcap-tap.h  adversary.h   -> ns-3 scratch/
 tools/     sweep.sh  frontier.py  uncertainty.py  iiot-tsn-dissector.lua
            verify_reproducibility.sh  compare_reference.py  reference/     rebuild, rerun and check
            round_check.sh  round_check.py                            do consensus rounds overlap?
+           adversary_check.sh                                        full PBFT model and Byzantine behaviours
 docs/      CAPTURES.md                                              packet captures and the dissector
 tests/     schedule_test.sh  check_sweep.sh
 CHANGELOG.md                                                        how the code got here, and releases
@@ -78,6 +79,11 @@ LICENSE.md                                                          MIT Licence
 | `--viewChange`, `--viewTimeout`, `--viewBackoff`, `--maxViewChanges` | on, 4 × round interval, 2, 64 | view change in the `full` model |
 | `--viewChangeSize`, `--newViewSize` | 0 (= `--consensusMsgSize`) | size charged for VIEW-CHANGE and NEW-VIEW |
 | `--pbftStats` | false | print the "pbft model" report section in the `v1` model too |
+| `--attack`, `--nByzantine`, `--byzSelect` | none, 0, `primary` | Byzantine behaviours (`full` model): `crash`, `withhold`, `equivocate`, `flood`, `delay`, `mismark`, and `inject` (compromised end stations); how many validators, and which |
+| `--attackStart`, `--attackStop` | `--warmup`, stop − cooldown | attack window; the control loop is reported inside and outside it |
+| `--floodFactor`, `--attackDelay` | 8, 0 ms | strength of `flood` and `delay` |
+| `--nInjectors`, `--injectClass`, `--injectFrame`, `--injectBurst`, `--injectInterval` | 0, `control`, 1024 B, 4, 200 µs | injectors at switch 0 sending to the IO device, with `--attack=inject` |
+| `--adversaryCsv` | off | per-round safety and liveness detail from the oracle |
 | `--pcap*` | off | see `docs/CAPTURES.md` |
 
 `./ns3 run "iiot-consensus-tsn --PrintHelp"` lists everything. The model is deterministic unless a random option is on.

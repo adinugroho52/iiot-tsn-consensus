@@ -42,6 +42,7 @@
 #include "ns3/tsn-module.h"
 
 #include "control-loop-app.h"
+#include "adversary.h"
 #include "pcap-tap.h"
 
 #include <algorithm>
@@ -110,9 +111,23 @@ static const uint32_t CLASS_BE        = 1;   // from ToS 0x00 -> prio 0
 //         uncommitted round, keeping each round's original start time. Timeouts
 //         back off exponentially and reset on a commit. Messages of a view the
 //         node has not entered yet are held and replayed when it enters it.
+//         A node that sees messages of a higher view from f+1 distinct senders
+//         (so from at least one correct node) moves to that view: this stands in
+//         for state transfer, so a node that was crashed can rejoin.
 //         Not modelled: certificates inside VIEW-CHANGE and NEW-VIEW (only their
 //         size is charged, --viewChangeSize and --newViewSize), checkpoints,
-//         state transfer, and the f+1 rule for joining a view change early.
+//         and the f+1 rule for joining a view change early.
+//
+// Byzantine behaviours (adversary.h, full model only), active inside the
+// attack window [attackStart, attackStop):
+//   crash       sends nothing and drops everything it receives
+//   withhold    takes part but never sends COMMIT, and never asks for a view change
+//   equivocate  as primary, sends one digest to half the backups and another to
+//               the rest; no quorum forms, so the backups time out
+//   flood       sends floodFactor copies of every broadcast
+//   delay       adds attackDelay to its processing of every message
+//   mismark     sends its consensus messages at the CONTROL codepoint, so the
+//               shaper releases them through the control gate
 //
 // Each phase is guarded by a per-round flag so a node broadcasts each phase
 // at most once, and senders are deduplicated in sets.
@@ -167,6 +182,22 @@ public:
     m_vcSize = viewChangeSize;
     m_nvSize = newViewSize;
   }
+
+  /** Make this node Byzantine (full model). bits: AdvBit mask from adversary.h. */
+  void SetAdversary(uint32_t bits, Time start, Time stop, uint32_t floodFactor, Time attackDelay)
+  {
+    m_adv = bits;
+    m_attackStart = start;
+    m_attackStop = stop;
+    m_floodFactor = std::max<uint32_t>(floodFactor, 1);
+    m_attackDelay = attackDelay;
+  }
+  void SetOracle(Ptr<ConsensusOracle> o) { m_oracle = o; }
+  bool IsByzantine() const { return IsValidatorAttack(m_adv); }
+  uint32_t GetMismarked()     const { return m_mismarked; }
+  uint32_t GetFloodExtra()    const { return m_floodExtra; }
+  uint32_t GetEquivocations() const { return m_equivocations; }
+  uint32_t GetCaughtUp()      const { return m_caughtUp; }
 
   // Instrumentation: broadcast counts by phase, and committed rounds.
   uint32_t GetSentPrePrepare() const { return m_sentPrePrepare; }
@@ -236,6 +267,16 @@ private:
         s->SetIpTos(m_useBe ? TOS_BE : TOS_CONSENSUS);
         s->Connect(InetSocketAddress(m_peers[i], m_port));
         m_txSockets.push_back(s);
+        if (m_adv & ADV_MISMARK)
+          {
+            // A second socket per peer at the CONTROL codepoint. Nothing in
+            // 802.1Qbv checks a frame's claimed class.
+            Ptr<Socket> m = Socket::CreateSocket(GetNode(), UdpSocketFactory::GetTypeId());
+            m->Bind();
+            m->SetIpTos(TOS_CONTROL);
+            m->Connect(InetSocketAddress(m_peers[i], m_port));
+            m_txMismark.push_back(m);
+          }
       }
 
     if (m_full)
@@ -255,6 +296,13 @@ private:
     for (auto& kv : m_rounds) kv.second.timer.Cancel();
     if (m_rxSocket) m_rxSocket->Close();
   }
+
+  bool Attacking() const
+  {
+    Time now = Simulator::Now();
+    return m_adv != ADV_NONE && now >= m_attackStart && now < m_attackStop;
+  }
+  bool Acts(uint32_t bit) const { return (m_adv & bit) && Attacking(); }
 
   uint32_t Primary() const { return m_full ? m_view % m_n : 0; }
   bool IsPrimary() const { return m_self == Primary(); }
@@ -308,7 +356,7 @@ private:
         if (!rs.committed && rs.commits.size() >= 2 * m_f + 1)
           {
             rs.committed = true;
-            RecordCommit(rs);
+            RecordCommit(h.round, rs);
           }
         break;
       }
@@ -344,21 +392,51 @@ private:
     RoundState& rs = m_rounds[round];
     if (rs.startNs < 0) rs.startNs = Simulator::Now().GetNanoSeconds();
     if (rs.committed || rs.haveProposal) return;
+    if (Acts(ADV_CRASH)) return;               // a crashed primary opens nothing
+    if (m_oracle) m_oracle->NoteRoundOpened(round, rs.startNs);
     rs.proposed = HonestDigest(round);
     rs.haveProposal = true;
-    Broadcast(PRE_PREPARE, round, rs.startNs, m_view, rs.proposed);
+    if (Acts(ADV_EQUIVOCATE))
+      {
+        // Half the backups get the honest digest, the rest a forked one. The
+        // primary holds the honest one. Neither half can collect 2f matching
+        // PREPAREs, so the round stalls until the backups time out: the attack
+        // costs no extra frames, only the view change it provokes.
+        size_t half = m_txSockets.size() / 2;
+        std::vector<uint8_t> a = MakeMsg(PRE_PREPARE, round, rs.startNs, m_view, rs.proposed, 0);
+        std::vector<uint8_t> b = MakeMsg(PRE_PREPARE, round, rs.startNs, m_view, ForkedDigest(round), 0);
+        for (size_t k = 0; k < m_txSockets.size(); ++k) SendTo(k, k < half ? a : b);
+        m_equivocations++;
+      }
+    else
+      {
+        Broadcast(PRE_PREPARE, round, rs.startNs, m_view, rs.proposed);
+      }
     m_sentPrePrepare++;
     CheckPrepared(round, rs);
   }
 
   /** The honest proposal's identity. Only equality within a round matters. */
   static uint32_t HonestDigest(uint32_t /*round*/) { return 0; }
+  static uint32_t ForkedDigest(uint32_t round) { return 0xA5A50000u | (round & 0xFFFFu); }
 
   void ProcessFull(const Hdr& h)
   {
     if (h.type == VIEW_CHANGE) { OnViewChange(h); return; }
     if (h.type == NEW_VIEW)    { OnNewView(h); return; }
-    if (h.view > m_view) { m_future.push_back(h); return; }   // replayed on entering it
+    if (h.view > m_view)
+      {
+        m_future.push_back(h);                // replayed on entering that view
+        // f+1 distinct senders in a higher view include a correct node: catch up.
+        auto& from = m_futureFrom[h.view];
+        from.insert(h.sender);
+        if (from.size() >= m_f + 1)
+          {
+            m_caughtUp++;
+            EnterView(h.view);
+          }
+        return;
+      }
     if (h.view < m_view) return;                                // from an abandoned view
 
     RoundState& rs = m_rounds[h.round];
@@ -390,7 +468,7 @@ private:
 
       case COMMIT:
         rs.commitsBy[h.digest].insert(h.sender);
-        TryCommit(rs);
+        TryCommit(h.round, rs);
         break;
       }
   }
@@ -398,25 +476,26 @@ private:
   /** Send COMMIT once PREPAREs from 2f senders match the proposal this node holds. */
   void CheckPrepared(uint32_t round, RoundState& rs)
   {
-    if (rs.haveProposal && !rs.sentCommit && rs.preparesBy[rs.proposed].size() >= 2 * m_f)
+    if (rs.haveProposal && !rs.sentCommit && rs.preparesBy[rs.proposed].size() >= 2 * m_f &&
+        !Acts(ADV_WITHHOLD))                    // withholding: prepare, then go quiet
       {
         rs.sentCommit = true;
         Broadcast(COMMIT, round, rs.startNs, m_view, rs.proposed);
         m_sentCommit++;
         rs.commitsBy[rs.proposed].insert(m_self);   // committed-local counts its own
       }
-    TryCommit(rs);
+    TryCommit(round, rs);
   }
 
   /** Commit once prepared and holding 2f+1 matching COMMITs, its own included. */
-  void TryCommit(RoundState& rs)
+  void TryCommit(uint32_t round, RoundState& rs)
   {
     if (rs.committed || !rs.haveProposal || !rs.sentCommit) return;
     if (rs.commitsBy[rs.proposed].size() < 2 * m_f + 1) return;
     rs.committed = true;
     rs.timer.Cancel();
     m_viewTimeout = m_baseViewTimeout;   // a commit ends any backoff
-    RecordCommit(rs);
+    RecordCommit(round, rs);
   }
 
   void ArmViewTimer(uint32_t round)
@@ -433,6 +512,9 @@ private:
     auto it = m_rounds.find(round);
     if (it == m_rounds.end() || it->second.committed) return;
     if (m_viewsEntered >= m_maxViews) return;
+    // A crashed node cannot ask for a view change and a withholding one need
+    // not: part of why recovery needs 2f+1 requests rather than f+1.
+    if (Acts(ADV_CRASH) || Acts(ADV_WITHHOLD)) return;
     uint32_t target = m_view + 1;
     if (m_requestedView >= target) return;   // one request per view
     m_requestedView = target;
@@ -479,6 +561,8 @@ private:
     m_view = v;
     m_viewsEntered++;
     m_requestedView = 0;
+    if (m_oracle && !IsByzantine()) m_oracle->NoteViewChange(m_self, v);
+    m_futureFrom.erase(m_futureFrom.begin(), m_futureFrom.upper_bound(v));
     // Exponential backoff (Castro-Liskov); reset by the next commit.
     m_viewTimeout = m_viewTimeout * m_viewBackoff;
     // Votes are per view; round identity and start time carry over.
@@ -508,9 +592,12 @@ private:
 
   // ---- both ----------------------------------------------------------------------
 
-  void RecordCommit(RoundState& rs)
+  void RecordCommit(uint32_t round, RoundState& rs)
   {
     m_committed++;
+    // Only correct nodes file commits: safety is agreement among correct nodes.
+    if (m_oracle && !IsByzantine())
+      m_oracle->NoteCommit(round, m_self, rs.proposed, Simulator::Now().GetNanoSeconds());
     // Time from the round first being opened (across view changes) to this
     // node committing it. This is the metric that moves under gate
     // quantisation; round and message counts do not until consensus fails.
@@ -521,8 +608,9 @@ private:
     m_commitTrace(Simulator::Now());
   }
 
-  void Broadcast(MsgType t, uint32_t round, int64_t startNs, uint32_t view = 0,
-                 uint32_t digest = 0, uint32_t size = 0)
+  /** One message, header first, in a zeroed buffer of its full size. */
+  std::vector<uint8_t> MakeMsg(MsgType t, uint32_t round, int64_t startNs, uint32_t view,
+                               uint32_t digest, uint32_t size) const
   {
     // Zero first so the struct's alignment padding is deterministic, and build the whole
     // message in a zeroed buffer: Packet::AddPaddingAtEnd() leaves the bytes it adds
@@ -538,11 +626,31 @@ private:
     uint32_t bytes = size ? size : m_msgSize;
     std::vector<uint8_t> buf(std::max<uint32_t>(bytes, sizeof(h)), 0);
     std::memcpy(buf.data(), &h, sizeof(h));
-    for (auto& s : m_txSockets)
+    return buf;
+  }
+
+  /** Send to peer slot k, at the control codepoint if this node mismarks. */
+  void SendTo(size_t k, const std::vector<uint8_t>& buf)
+  {
+    bool mis = Acts(ADV_MISMARK) && k < m_txMismark.size();
+    Ptr<Packet> p = Create<Packet>(buf.data(), buf.size());
+    (mis ? m_txMismark[k] : m_txSockets[k])->Send(p);
+    m_msgsSent++;
+    if (mis) m_mismarked++;
+  }
+
+  void Broadcast(MsgType t, uint32_t round, int64_t startNs, uint32_t view = 0,
+                 uint32_t digest = 0, uint32_t size = 0)
+  {
+    if (Acts(ADV_CRASH)) return;
+    std::vector<uint8_t> buf = MakeMsg(t, round, startNs, view, digest, size);
+    // Flooding: receivers deduplicate by sender, so the protocol outcome is
+    // unchanged and only the bandwidth grows.
+    uint32_t reps = Acts(ADV_FLOOD) ? m_floodFactor : 1;
+    for (uint32_t r = 0; r < reps; ++r)
       {
-        Ptr<Packet> p = Create<Packet>(buf.data(), buf.size());
-        s->Send(p);
-        m_msgsSent++;
+        for (size_t k = 0; k < m_txSockets.size(); ++k) SendTo(k, buf);
+        if (r > 0) m_floodExtra += static_cast<uint32_t>(m_txSockets.size());
       }
   }
 
@@ -555,9 +663,14 @@ private:
         if (p->GetSize() < sizeof(Hdr)) continue;
         Hdr h;
         p->CopyData(reinterpret_cast<uint8_t*>(&h), sizeof(h));
+        // A crashed node neither sends nor processes.
+        if (Acts(ADV_CRASH)) continue;
         // Signature verification cost. Calibrate from your own testbed
-        // rather than leaving it at the default.
-        Simulator::Schedule(m_verifyDelay, &ConsensusApp::Process, this, h);
+        // rather than leaving it at the default. A delaying node adds to it; a
+        // reaction that then misses its gate waits a whole cycle.
+        Time d = m_verifyDelay;
+        if (Acts(ADV_DELAY)) d += m_attackDelay;
+        Simulator::Schedule(d, &ConsensusApp::Process, this, h);
       }
   }
 
@@ -590,6 +703,16 @@ private:
   uint32_t m_vcSize{0}, m_nvSize{0};
   std::map<uint32_t, std::set<uint32_t>> m_viewVotes;
   std::vector<Hdr> m_future;
+  std::map<uint32_t, std::set<uint32_t>> m_futureFrom;   // senders seen per higher view
+
+  // adversary (full model)
+  uint32_t m_adv{ADV_NONE};
+  Time     m_attackStart{Time::Max()}, m_attackStop{Time::Max()};
+  uint32_t m_floodFactor{1};
+  Time     m_attackDelay;
+  Ptr<ConsensusOracle> m_oracle;
+  std::vector<Ptr<Socket>> m_txMismark;
+  uint32_t m_mismarked{0}, m_floodExtra{0}, m_equivocations{0}, m_caughtUp{0};
 
   uint32_t m_sentPrePrepare{0}, m_sentPrepare{0}, m_sentCommit{0};
   uint32_t m_sentViewChange{0}, m_sentNewView{0}, m_overtaken{0};
@@ -759,6 +882,19 @@ int main(int argc, char* argv[])
   uint32_t viewChangeSize = 0;          // 0: consensusMsgSize
   uint32_t newViewSize = 0;             // 0: consensusMsgSize
   bool     pbftStats = false;
+  std::string attackSpec = "none";
+  uint32_t nByzantine = 0;
+  std::string byzSelect = "primary";
+  Time     attackStart = Seconds(-1);   // negative: --warmup
+  Time     attackStop  = Seconds(-1);   // negative: stopAt - cooldown
+  uint32_t floodFactor = 8;
+  Time     attackDelay = MilliSeconds(0);
+  uint32_t nInjectors = 0;
+  std::string injectClass = "control";
+  uint32_t injectFrame = 1024;
+  uint32_t injectBurst = 4;
+  Time     injectInterval = MicroSeconds(200);
+  std::string adversaryCsv = "";
   bool consensusInBe = false;
   Time     perHopOffset = MicroSeconds(-1);   // negative => derive automatically
   Time     cooldown = MilliSeconds(100);
@@ -861,7 +997,7 @@ int main(int argc, char* argv[])
   cmd.AddValue("pcapPoints",
                "Comma-separated capture points: none | control (PLC and IO "
                "access links) | trunk (switch-to-switch) | path (control + "
-               "trunk, the whole PLC->IO path) | validators | all",
+               "trunk, the whole PLC->IO path) | validators | injectors | all",
                pcapPoints);
   cmd.AddValue("pcapPrefix", "File name stem for captures", pcapPrefix);
   cmd.AddValue("pcapMode",
@@ -901,6 +1037,31 @@ int main(int argc, char* argv[])
   cmd.AddValue("newViewSize", "full model: NEW-VIEW size in bytes (0 = consensusMsgSize)",
                newViewSize);
   cmd.AddValue("pbftStats", "print the pbft model section in the v1 model too", pbftStats);
+  cmd.AddValue("attack",
+               "Comma-separated behaviours: none | crash | withhold | equivocate | flood | "
+               "delay | mismark | inject. Validator behaviours need --pbftModel=full. "
+               "Naming a validator behaviour with --nByzantine=0 makes it 1; naming inject "
+               "with --nInjectors=0 makes it 1", attackSpec);
+  cmd.AddValue("nByzantine", "Number of Byzantine validators", nByzantine);
+  cmd.AddValue("byzSelect",
+               "Which validators are Byzantine: primary (0, 1, ..., so the first primary "
+               "is faulty) | spread (evenly spaced, on different switches) | last "
+               "(n-1, n-2, ..., so the primary stays honest)", byzSelect);
+  cmd.AddValue("attackStart", "Start of the attack window. Negative = --warmup", attackStart);
+  cmd.AddValue("attackStop",
+               "End of the attack window, leaving a recovery period. Negative = stopAt - "
+               "cooldown", attackStop);
+  cmd.AddValue("floodFactor", "Copies of every broadcast under --attack=flood", floodFactor);
+  cmd.AddValue("attackDelay", "Extra processing delay under --attack=delay", attackDelay);
+  cmd.AddValue("nInjectors",
+               "Compromised end stations at switch 0 sending to the IO device (no consensus "
+               "role); used only with --attack=inject", nInjectors);
+  cmd.AddValue("injectClass", "Class the injectors claim: control | consensus | be", injectClass);
+  cmd.AddValue("injectFrame", "Injected UDP payload size in bytes", injectFrame);
+  cmd.AddValue("injectBurst", "Frames per injector burst", injectBurst);
+  cmd.AddValue("injectInterval", "Interval between injector bursts", injectInterval);
+  cmd.AddValue("adversaryCsv", "If set, write per-round safety and liveness detail here",
+               adversaryCsv);
   cmd.Parse(argc, argv);
 
   NS_ABORT_MSG_IF(shaper != "tas" && shaper != "prio" && shaper != "fifo",
@@ -921,11 +1082,11 @@ int main(int argc, char* argv[])
     for (const auto& s : pcapSel)
       {
         NS_ABORT_MSG_IF(s != "control" && s != "trunk" && s != "path" &&
-                        s != "validators" && s != "all",
+                        s != "validators" && s != "injectors" && s != "all",
                         "unknown --pcapPoints value \"" << s << "\"");
       }
     if (pcapSel.count("all"))
-      { pcapSel = {"control", "trunk", "validators"}; }
+      { pcapSel = {"control", "trunk", "validators", "injectors"}; }
     if (pcapSel.count("path"))
       { pcapSel.erase("path"); pcapSel.insert("control"); pcapSel.insert("trunk"); }
   }
@@ -1014,6 +1175,19 @@ int main(int argc, char* argv[])
       valDevs.push_back(p2p.Install(NodeContainer(validators.Get(i), switches.Get(sw))));
     }
 
+  // Injectors (compromised end stations) attach to switch 0 and send to the IO
+  // device, so their traffic crosses the whole control path. Created after
+  // everything else, so a run without them builds exactly the same network.
+  NodeContainer injectors;
+  std::vector<NetDeviceContainer> injDevs;
+  if (nInjectors > 0)
+    {
+      injectors.Create(nInjectors);
+      stack.Install(injectors);
+      for (uint32_t i = 0; i < nInjectors; ++i)
+        injDevs.push_back(p2p.Install(NodeContainer(injectors.Get(i), switches.Get(0))));
+    }
+
   // --- Feasibility: can each class serialise its largest frame in-window? --
   DataRate rate(linkRate);
   Time ctrlWindow = cycle * ctrlFrac;
@@ -1033,6 +1207,28 @@ int main(int argc, char* argv[])
   NS_ABORT_MSG_IF(viewBackoff < 1.0, "--viewBackoff must be at least 1.0");
   NS_ABORT_MSG_IF((viewChangeSize && viewChangeSize < 32) || (newViewSize && newViewSize < 32),
                   "--viewChangeSize and --newViewSize must be 0 or at least 32 B");
+  uint32_t advBits = ADV_NONE;
+  {
+    std::string bad;
+    NS_ABORT_MSG_IF(!ParseAttack(attackSpec, advBits, bad),
+                    "unknown --attack behaviour \"" << bad << "\"");
+  }
+  if (IsValidatorAttack(advBits) && nByzantine == 0) nByzantine = 1;
+  if ((advBits & ADV_INJECT) && nInjectors == 0) nInjectors = 1;
+  if (!(advBits & ADV_INJECT)) nInjectors = 0;
+  NS_ABORT_MSG_IF(IsValidatorAttack(advBits) && !fullModel,
+                  "validator behaviours need --pbftModel=full");
+  NS_ABORT_MSG_IF(nByzantine > nValidators, "--nByzantine exceeds --nValidators");
+  NS_ABORT_MSG_IF(byzSelect != "primary" && byzSelect != "spread" && byzSelect != "last",
+                  "--byzSelect must be primary, spread or last");
+  uint8_t injectTos = TOS_CONTROL;
+  if (injectClass == "consensus") injectTos = TOS_CONSENSUS;
+  else if (injectClass == "be") injectTos = TOS_BE;
+  else NS_ABORT_MSG_IF(injectClass != "control", "--injectClass must be control, consensus or be");
+  if (attackStart < Time(0)) attackStart = warmup;
+  if (attackStop < Time(0)) attackStop = stopAt - cooldown;
+  NS_ABORT_MSG_IF(advBits != ADV_NONE && attackStop <= attackStart,
+                  "the attack window is empty: --attackStop must be after --attackStart");
   NS_ABORT_MSG_IF(nValidators > 0 && consensusMsgSize < 32,
                   "consensusMsgSize must be at least 32 B: the consensus "
                   "header (type, round, sender, startNs, view, digest) is "
@@ -1102,6 +1298,14 @@ int main(int argc, char* argv[])
       down << "sw" << sw << "-val" << i;
       ports.push_back({valDevs[i].Get(0), up.str(),   "validators", sw + 1});
       ports.push_back({valDevs[i].Get(1), down.str(), "validators", sw + 1});
+    }
+  for (uint32_t i = 0; i < injDevs.size(); ++i)
+    {
+      std::ostringstream up, down;
+      up   << "inj" << i << "-eg";
+      down << "sw0-inj" << i;
+      ports.push_back({injDevs[i].Get(0), up.str(),   "injectors", 1});
+      ports.push_back({injDevs[i].Get(1), down.str(), "injectors", 1});
     }
 
   // --- Install the shaper on every port ------------------------------------
@@ -1222,6 +1426,7 @@ int main(int argc, char* argv[])
 
   std::vector<Ipv4Address> valAddrs;
   for (auto& dc : valDevs) valAddrs.push_back(assign(dc).GetAddress(0));
+  for (auto& dc : injDevs) assign(dc);
 
   Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 
@@ -1268,6 +1473,7 @@ int main(int argc, char* argv[])
 
   Ptr<ControlSinkApp> sinkApp = CreateObject<ControlSinkApp>();
   sinkApp->Setup(ctrlPort, ctrlDeadline, warmup, stopAt - cooldown);
+  if (advBits != ADV_NONE) sinkApp->SetAttackWindow(attackStart, attackStop);
   io.Get(0)->AddApplication(sinkApp);
   sinkApp->SetStartTime(Seconds(0));
   sinkApp->SetStopTime(stopAt);
@@ -1289,17 +1495,51 @@ int main(int argc, char* argv[])
       roundPhase = NanoSeconds(ph->GetInteger(0, cycle.GetNanoSeconds() - 1));
     }
   std::vector<Ptr<ConsensusApp>> consensusApps;
+  // The oracle observes commits and views from outside; it sends nothing.
+  Ptr<ConsensusOracle> oracle = fullModel ? Create<ConsensusOracle>() : nullptr;
+  std::set<uint32_t> byzantine =
+      IsValidatorAttack(advBits) ? SelectByzantine(byzSelect, nValidators, nByzantine)
+                                 : std::set<uint32_t>();
   for (uint32_t i = 0; i < nValidators; ++i)
     {
       Ptr<ConsensusApp> app = CreateObject<ConsensusApp>();
       app->Setup(valAddrs, i, 7000, consensusInterval, consensusMsgSize, verifyDelay, consensusInBe);
       if (fullModel)
-        app->SetFullModel(viewChange, viewTimeout, viewBackoff, maxViewChanges,
-                          viewChangeSize, newViewSize);
+        {
+          app->SetFullModel(viewChange, viewTimeout, viewBackoff, maxViewChanges,
+                            viewChangeSize, newViewSize);
+          app->SetOracle(oracle);
+          if (byzantine.count(i))
+            app->SetAdversary(advBits & ~ADV_INJECT, attackStart, attackStop, floodFactor,
+                              attackDelay);
+        }
       validators.Get(i)->AddApplication(app);
       app->SetStartTime(Seconds(0.2) + roundPhase);
       app->SetStopTime(stopAt);
       consensusApps.push_back(app);
+    }
+
+  // --- Injectors: compromised end stations, no consensus role -------------
+  std::vector<Ptr<InjectorApp>> injApps;
+  Ptr<CountingSinkApp> injSink;
+  if (nInjectors > 0)
+    {
+      const uint16_t injPort = 5001;
+      injSink = CreateObject<CountingSinkApp>();
+      injSink->Setup(injPort);
+      io.Get(0)->AddApplication(injSink);
+      injSink->SetStartTime(Seconds(0));
+      injSink->SetStopTime(stopAt);
+      for (uint32_t i = 0; i < nInjectors; ++i)
+        {
+          Ptr<InjectorApp> a = CreateObject<InjectorApp>();
+          a->Setup(ioIf.GetAddress(0), injPort, injectTos, injectFrame, injectBurst,
+                   injectInterval, attackStart, attackStop);
+          injectors.Get(i)->AddApplication(a);
+          a->SetStartTime(Seconds(0.1));
+          a->SetStopTime(stopAt);
+          injApps.push_back(a);
+        }
     }
 
   // --- Measurement --------------------------------------------------------
@@ -1458,6 +1698,67 @@ int main(int argc, char* argv[])
                 << "  views entered       " << entered << "  (highest view " << viewMax << ")\n"
                 << "  prepares before pre-prepare  " << over
                 << "  node-rounds with PREPAREs from 2f senders before the PRE-PREPARE\n";
+    }
+
+  if (advBits != ADV_NONE)
+    {
+      uint32_t mis = 0, fl = 0, eq = 0, cu = 0;
+      for (auto& a : consensusApps)
+        {
+          mis += a->GetMismarked();
+          fl += a->GetFloodExtra();
+          eq += a->GetEquivocations();
+          cu += a->GetCaughtUp();
+        }
+      std::ostringstream who;
+      for (uint32_t b : byzantine) who << (who.tellp() ? "," : "") << b;
+      std::cout << "\n=== adversary ===\n"
+                << "  attack              " << AttackName(advBits) << "\n"
+                << "  byzantine           " << byzantine.size() << " of " << n << " (f = "
+                << (n ? (n - 1) / 3 : 0) << ")  select " << byzSelect << "  ids "
+                << (byzantine.empty() ? "-" : who.str()) << "\n"
+                << "  window              [" << attackStart.GetSeconds() << " s, "
+                << attackStop.GetSeconds() << " s)\n"
+                << "  mismarked frames    " << mis << "\n"
+                << "  flood extra frames  " << fl << "  (factor " << floodFactor << ")\n"
+                << "  equivocations       " << eq << "\n"
+                << "  caught up to a view " << cu << "\n";
+      if (nInjectors > 0)
+        {
+          uint64_t sent = 0;
+          for (auto& a : injApps) sent += a->GetFramesSent();
+          std::cout << "  injectors           " << nInjectors << "  class " << injectClass
+                    << "  " << injectFrame << " B x " << injectBurst << " every "
+                    << injectInterval.GetMicroSeconds() << " us\n"
+                    << "  injected frames     sent " << sent << "  arrived "
+                    << injSink->GetFrames() << "\n";
+        }
+      if (oracle)
+        {
+          uint32_t q = 2 * ((n - 1) / 3) + 1;
+          std::cout << "  rounds opened       " << oracle->RoundsOpened() << "\n"
+                    << "  rounds with commit  " << oracle->RoundsWithAnyCommit()
+                    << "  (any correct node)\n"
+                    << "  rounds quorum-done  " << oracle->QuorumComplete(q)
+                    << "  (2f+1 correct nodes, same digest)\n"
+                    << "  safety violations   " << oracle->SafetyViolations() << "\n"
+                    << "  longest stall       "
+                    << oracle->MaxStallNs((stopAt - cooldown).GetNanoSeconds()) / 1000.0
+                    << " us\n";
+          if (!adversaryCsv.empty())
+            {
+              std::ofstream f(adversaryCsv);
+              oracle->DumpCsv(f, q);
+            }
+        }
+      const auto& d = sinkApp->GetDuring();
+      const auto& o = sinkApp->GetOutside();
+      std::cout << "  control during      received " << d.received << "  missed " << d.missed
+                << "  p99 " << ControlSinkApp::PercentileUsOf(d, 0.99) << " us  max "
+                << d.maxNs / 1000.0 << " us\n"
+                << "  control outside     received " << o.received << "  missed " << o.missed
+                << "  p99 " << ControlSinkApp::PercentileUsOf(o, 0.99) << " us  max "
+                << o.maxNs / 1000.0 << " us\n";
     }
 
   taps.Report(std::cout);

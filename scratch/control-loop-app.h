@@ -171,32 +171,63 @@ public:
 
   const Stats& GetStats() const { return m_stats; }
 
-  double MissRatio() const
+  /**
+   * Split the samples at an attack window, by ARRIVAL time: a frame sent before
+   * the attack but delayed past its deadline by it counts as a casualty of the
+   * attack. A short attack inside a long run barely moves the aggregate
+   * statistics; the split makes it visible, and the samples after the window
+   * show whether the loop recovers. Without a window nothing changes.
+   */
+  void SetAttackWindow(Time start, Time stop)
   {
-    return m_stats.received ? double(m_stats.missed) / m_stats.received : 0.0;
+    m_attackStart = start;
+    m_attackStop = stop;
+    m_haveWindow = true;
   }
+  bool HaveWindow() const { return m_haveWindow; }
+  const Stats& GetDuring() const { return m_during; }
+  const Stats& GetOutside() const { return m_outside; }
 
-  double MeanUs() const
+  static double MissRatioOf(const Stats& s)
   {
-    return m_stats.received ? double(m_stats.sumNs) / m_stats.received / 1000.0 : 0.0;
+    return s.received ? double(s.missed) / s.received : 0.0;
   }
-
-  /** Latency at the given percentile, in microseconds. */
-  double PercentileUs(double q) const
+  static double MeanUsOf(const Stats& s)
   {
-    if (m_stats.samples.empty()) return 0.0;
-    std::vector<int64_t> v = m_stats.samples;
+    return s.received ? double(s.sumNs) / s.received / 1000.0 : 0.0;
+  }
+  static double PercentileUsOf(const Stats& s, double q)
+  {
+    if (s.samples.empty()) return 0.0;
+    std::vector<int64_t> v = s.samples;
     std::sort(v.begin(), v.end());
     size_t idx = static_cast<size_t>(q * (v.size() - 1));
     return v[idx] / 1000.0;
   }
 
-  /** One latency sample per line, nanoseconds. Feed to your plotting script. */
+  double MissRatio() const { return MissRatioOf(m_stats); }
+  double MeanUs() const { return MeanUsOf(m_stats); }
+
+  /** Latency at the given percentile, in microseconds. */
+  double PercentileUs(double q) const { return PercentileUsOf(m_stats, q); }
+
+  /**
+   * One latency sample per line, nanoseconds. With an attack window the file
+   * also has the arrival time and whether it fell in the window; scripts that
+   * read only the first column are unaffected.
+   */
   void DumpCsv(const std::string& path) const
   {
     std::ofstream f(path);
-    f << "latency_ns\n";
-    for (int64_t s : m_stats.samples) f << s << "\n";
+    if (!m_haveWindow)
+      {
+        f << "latency_ns\n";
+        for (int64_t s : m_stats.samples) f << s << "\n";
+        return;
+      }
+    f << "latency_ns,rx_ns,in_attack\n";
+    for (size_t i = 0; i < m_stats.samples.size(); ++i)
+      f << m_stats.samples[i] << "," << m_rxNs[i] << "," << (m_inAttack[i] ? 1 : 0) << "\n";
   }
 
 private:
@@ -228,13 +259,26 @@ private:
         if (now > m_measureEnd) continue;    // discard quiet tail
 
         int64_t lat = now.GetNanoSeconds() - p.txNs;
-        m_stats.received++;
-        m_stats.sumNs += lat;
-        m_stats.minNs = std::min(m_stats.minNs, lat);
-        m_stats.maxNs = std::max(m_stats.maxNs, lat);
-        m_stats.samples.push_back(lat);
-        if (lat > m_deadline.GetNanoSeconds()) m_stats.missed++;
+        bool miss = lat > m_deadline.GetNanoSeconds();
+        Record(m_stats, lat, miss);
+        if (m_haveWindow)
+          {
+            bool during = now >= m_attackStart && now < m_attackStop;
+            Record(during ? m_during : m_outside, lat, miss);
+            m_rxNs.push_back(now.GetNanoSeconds());
+            m_inAttack.push_back(during);
+          }
       }
+  }
+
+  static void Record(Stats& s, int64_t lat, bool miss)
+  {
+    s.received++;
+    s.sumNs += lat;
+    s.minNs = std::min(s.minNs, lat);
+    s.maxNs = std::max(s.maxNs, lat);
+    s.samples.push_back(lat);
+    if (miss) s.missed++;
   }
 
   Ptr<Socket> m_sock;
@@ -243,6 +287,12 @@ private:
   Time m_warmup;
   Time m_measureEnd{Time::Max()};
   Stats m_stats;
+  // attack window (optional)
+  bool m_haveWindow{false};
+  Time m_attackStart{Time::Max()}, m_attackStop{Time::Max()};
+  Stats m_during, m_outside;
+  std::vector<int64_t> m_rxNs;
+  std::vector<bool> m_inAttack;
 };
 
 NS_OBJECT_ENSURE_REGISTERED(ControlSourceApp);
