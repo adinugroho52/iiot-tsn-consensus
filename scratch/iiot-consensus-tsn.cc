@@ -79,19 +79,50 @@ static const uint32_t CLASS_BE        = 1;   // from ToS 0x00 -> prio 0
 // ---------------------------------------------------------------------------
 // ConsensusApp: generates PBFT-shaped message bursts.
 //
-// Models message TIMING and VOLUME only -- no crypto, no chain, no view
-// change. Signature verification is a CPU delay before a node reacts.
+// Models message TIMING and VOLUME only -- no crypto, no chain. Signature
+// verification is a CPU delay before a node reacts to a message.
 //
-// Classic PBFT round with n nodes, f = (n-1)/3, one static primary:
+// Classic PBFT round with n nodes, f = (n-1)/3:
 //   PRE-PREPARE  primary -> backups        n-1 messages
 //   PREPARE      backups -> all            (n-1)(n-1) messages
 //   COMMIT       all -> all                n(n-1) messages
 // For n = 4 that is 3 + 9 + 12 = 24 messages per round.
 //
+// Two models, chosen with --pbftModel:
+//
+//   v1    The normal-case pattern of release 1.x, reproduced exactly: validator
+//         0 is the primary for the whole run, there is no view change, a node
+//         sends its COMMIT after PREPAREs from 2f distinct senders whether or not
+//         its PRE-PREPARE has arrived, and it commits on COMMITs from 2f+1 other
+//         validators. With this model every run of release 1.x reproduces bit
+//         for bit, captures included.
+//
+//   full  PBFT's normal case and view change (Castro and Liskov), as a traffic
+//         model. Votes are counted per proposal (digest). A node prepares only
+//         for a proposal it holds, and on accepting a PRE-PREPARE it re-checks
+//         the PREPAREs and COMMITs that arrived before it. A node counts its own
+//         COMMIT, as PBFT's committed-local predicate does: with f faulty nodes
+//         only 2f correct peers remain, so 2f+1 COMMITs from others alone could
+//         never be collected. The primary of view v is validator v mod n. Every
+//         node keeps the round clock; a backup that has not committed a round
+//         within the view timeout broadcasts VIEW-CHANGE (all to all), the new
+//         primary collects 2f+1 and broadcasts NEW-VIEW and re-proposes every
+//         uncommitted round, keeping each round's original start time. Timeouts
+//         back off exponentially and reset on a commit. Messages of a view the
+//         node has not entered yet are held and replayed when it enters it.
+//         Not modelled: certificates inside VIEW-CHANGE and NEW-VIEW (only their
+//         size is charged, --viewChangeSize and --newViewSize), checkpoints,
+//         state transfer, and the f+1 rule for joining a view change early.
+//
 // Each phase is guarded by a per-round flag so a node broadcasts each phase
-// at most once, and senders are deduplicated in a set. Counting with bare
-// "== 2f" equality (as an earlier draft did) under-fires whenever messages
-// are reordered or duplicated.
+// at most once, and senders are deduplicated in sets.
+//
+// Wire header (32 bytes, little endian, the rest of the message is zeros):
+//   0 type | 4 round | 8 sender | 16 round start (ns) | 24 view | 28 digest
+// The first 24 bytes are release 1.x's layout, so tools/round_check.py and the
+// dissector read both. view and digest are 0 in the v1 model and for an honest
+// proposal, which leaves v1 messages byte-identical to release 1.x. A
+// VIEW-CHANGE carries the view it asks for in the digest field.
 // ---------------------------------------------------------------------------
 class ConsensusApp : public Application
 {
@@ -102,7 +133,7 @@ public:
       .SetParent<Application>()
       .AddConstructor<ConsensusApp>()
       .AddTraceSource("RoundCommitted",
-                      "Fired when this node collects 2f+1 COMMITs for a round",
+                      "Fired when this node commits a round",
                       MakeTraceSourceAccessor(&ConsensusApp::m_commitTrace),
                       "ns3::Time::TracedCallback");
     return tid;
@@ -124,6 +155,19 @@ public:
     m_f = (m_n - 1) / 3;
   }
 
+  /** Select the full model. Without this call the node runs the v1 model. */
+  void SetFullModel(bool viewChange, Time viewTimeout, double backoff, uint32_t maxViews,
+                    uint32_t viewChangeSize, uint32_t newViewSize)
+  {
+    m_full = true;
+    m_vcEnabled = viewChange;
+    m_baseViewTimeout = m_viewTimeout = viewTimeout;
+    m_viewBackoff = backoff;
+    m_maxViews = maxViews;
+    m_vcSize = viewChangeSize;
+    m_nvSize = newViewSize;
+  }
+
   // Instrumentation: broadcast counts by phase, and committed rounds.
   uint32_t GetSentPrePrepare() const { return m_sentPrePrepare; }
   uint32_t GetSentPrepare()    const { return m_sentPrepare; }
@@ -133,22 +177,44 @@ public:
   int64_t  GetLatSum()         const { return m_latSum; }
   int64_t  GetLatMax()         const { return m_latMax; }
   const std::vector<int64_t>& GetLatSamples() const { return m_latSamples; }
+  // Rounds the round clock opened: the primary's PRE-PREPAREs in v1, every
+  // node's clock ticks in full (all nodes tick together).
+  uint32_t GetRoundsOpened()   const { return m_full ? m_expected : m_sentPrePrepare; }
+  uint32_t GetSentViewChange() const { return m_sentViewChange; }
+  uint32_t GetSentNewView()    const { return m_sentNewView; }
+  uint32_t GetViewsEntered()   const { return m_viewsEntered; }
+  uint32_t GetView()           const { return m_view; }
+  /** Rounds in which PREPAREs from 2f senders arrived before the PRE-PREPARE. */
+  uint32_t GetOvertaken()      const { return m_overtaken; }
 
 private:
-  enum MsgType : uint8_t { PRE_PREPARE = 1, PREPARE = 2, COMMIT = 3 };
+  enum MsgType : uint8_t { PRE_PREPARE = 1, PREPARE = 2, COMMIT = 3, VIEW_CHANGE = 4, NEW_VIEW = 5 };
 
   struct Hdr
   {
     uint8_t  type;
     uint32_t round;
     uint32_t sender;
-    int64_t  startNs;   // when the primary opened this round
+    int64_t  startNs;   // when the round was first opened
+    uint32_t view;      // full model; 0 in v1
+    uint32_t digest;    // proposal identity (0 = honest), or a VIEW-CHANGE's target view
   };
+  static_assert(sizeof(Hdr) == 32, "consensus header must stay 32 bytes");
 
   struct RoundState
   {
+    // v1 model: senders, whatever they voted for.
     std::set<uint32_t> prepares;
     std::set<uint32_t> commits;
+    bool gotPrePrepare{false};       // statistics only
+    // full model: senders per digest.
+    std::map<uint32_t, std::set<uint32_t>> preparesBy;
+    std::map<uint32_t, std::set<uint32_t>> commitsBy;
+    uint32_t proposed{0};
+    bool haveProposal{false};
+    bool timerArmed{false};
+    EventId timer;
+    // both
     int64_t startNs{-1};
     bool sentPrepare{false};
     bool sentCommit{false};
@@ -172,7 +238,11 @@ private:
         m_txSockets.push_back(s);
       }
 
-    if (IsPrimary())
+    if (m_full)
+      {
+        m_roundEvent = Simulator::Schedule(m_roundInterval, &ConsensusApp::RoundTick, this);
+      }
+    else if (IsPrimary())
       {
         m_roundEvent = Simulator::Schedule(m_roundInterval,
                                            &ConsensusApp::StartRound, this);
@@ -182,10 +252,14 @@ private:
   void StopApplication() override
   {
     m_roundEvent.Cancel();
+    for (auto& kv : m_rounds) kv.second.timer.Cancel();
     if (m_rxSocket) m_rxSocket->Close();
   }
 
-  bool IsPrimary() const { return m_self == 0; }   // static primary
+  uint32_t Primary() const { return m_full ? m_view % m_n : 0; }
+  bool IsPrimary() const { return m_self == Primary(); }
+
+  // ---- v1 model ----------------------------------------------------------------
 
   void StartRound()
   {
@@ -199,7 +273,256 @@ private:
                                        &ConsensusApp::StartRound, this);
   }
 
-  void Broadcast(MsgType t, uint32_t round, int64_t startNs)
+  void ProcessV1(Hdr h)
+  {
+    RoundState& rs = m_rounds[h.round];
+    if (rs.startNs < 0) rs.startNs = h.startNs;
+
+    switch (h.type)
+      {
+      case PRE_PREPARE:
+        rs.gotPrePrepare = true;
+        // Backups answer a PRE-PREPARE with a PREPARE. The primary does not
+        // send PREPARE; its PRE-PREPARE plays that role.
+        if (!IsPrimary() && !rs.sentPrepare)
+          {
+            rs.sentPrepare = true;
+            Broadcast(PREPARE, h.round, rs.startNs);
+            m_sentPrepare++;
+          }
+        break;
+
+      case PREPARE:
+        rs.prepares.insert(h.sender);
+        if (!rs.sentCommit && rs.prepares.size() >= 2 * m_f)
+          {
+            if (!IsPrimary() && !rs.gotPrePrepare) m_overtaken++;
+            rs.sentCommit = true;
+            Broadcast(COMMIT, h.round, rs.startNs);
+            m_sentCommit++;
+          }
+        break;
+
+      case COMMIT:
+        rs.commits.insert(h.sender);
+        if (!rs.committed && rs.commits.size() >= 2 * m_f + 1)
+          {
+            rs.committed = true;
+            RecordCommit(rs);
+          }
+        break;
+      }
+  }
+
+  /** Keep the round map bounded in long runs (v1: called by the primary only). */
+  void PruneOldRounds()
+  {
+    const uint32_t keep = m_full ? 64 : 16;
+    while (m_rounds.size() > keep)
+      {
+        m_rounds.begin()->second.timer.Cancel();
+        m_rounds.erase(m_rounds.begin());
+      }
+  }
+
+  // ---- full model ----------------------------------------------------------------
+
+  void RoundTick()
+  {
+    m_expected++;
+    RoundState& rs = m_rounds[m_expected];
+    // Every node keeps the same round clock (synchronised, like the gates).
+    if (rs.startNs < 0) rs.startNs = Simulator::Now().GetNanoSeconds();
+    if (IsPrimary()) Propose(m_expected);
+    else ArmViewTimer(m_expected);
+    PruneOldRounds();
+    m_roundEvent = Simulator::Schedule(m_roundInterval, &ConsensusApp::RoundTick, this);
+  }
+
+  void Propose(uint32_t round)
+  {
+    RoundState& rs = m_rounds[round];
+    if (rs.startNs < 0) rs.startNs = Simulator::Now().GetNanoSeconds();
+    if (rs.committed || rs.haveProposal) return;
+    rs.proposed = HonestDigest(round);
+    rs.haveProposal = true;
+    Broadcast(PRE_PREPARE, round, rs.startNs, m_view, rs.proposed);
+    m_sentPrePrepare++;
+    CheckPrepared(round, rs);
+  }
+
+  /** The honest proposal's identity. Only equality within a round matters. */
+  static uint32_t HonestDigest(uint32_t /*round*/) { return 0; }
+
+  void ProcessFull(const Hdr& h)
+  {
+    if (h.type == VIEW_CHANGE) { OnViewChange(h); return; }
+    if (h.type == NEW_VIEW)    { OnNewView(h); return; }
+    if (h.view > m_view) { m_future.push_back(h); return; }   // replayed on entering it
+    if (h.view < m_view) return;                                // from an abandoned view
+
+    RoundState& rs = m_rounds[h.round];
+    if (rs.startNs < 0) rs.startNs = h.startNs;
+    if (rs.committed) return;
+
+    switch (h.type)
+      {
+      case PRE_PREPARE:
+        if (h.sender != Primary() || rs.haveProposal) break;
+        if (rs.preparesBy[h.digest].size() >= 2 * m_f) m_overtaken++;
+        rs.proposed = h.digest;
+        rs.haveProposal = true;
+        if (!rs.sentPrepare)
+          {
+            rs.sentPrepare = true;
+            Broadcast(PREPARE, h.round, rs.startNs, m_view, rs.proposed);
+            m_sentPrepare++;
+          }
+        // PREPAREs and COMMITs may have arrived before the PRE-PREPARE (it can
+        // wait for a gate that the others pass): count them now.
+        CheckPrepared(h.round, rs);
+        break;
+
+      case PREPARE:
+        rs.preparesBy[h.digest].insert(h.sender);
+        CheckPrepared(h.round, rs);
+        break;
+
+      case COMMIT:
+        rs.commitsBy[h.digest].insert(h.sender);
+        TryCommit(rs);
+        break;
+      }
+  }
+
+  /** Send COMMIT once PREPAREs from 2f senders match the proposal this node holds. */
+  void CheckPrepared(uint32_t round, RoundState& rs)
+  {
+    if (rs.haveProposal && !rs.sentCommit && rs.preparesBy[rs.proposed].size() >= 2 * m_f)
+      {
+        rs.sentCommit = true;
+        Broadcast(COMMIT, round, rs.startNs, m_view, rs.proposed);
+        m_sentCommit++;
+        rs.commitsBy[rs.proposed].insert(m_self);   // committed-local counts its own
+      }
+    TryCommit(rs);
+  }
+
+  /** Commit once prepared and holding 2f+1 matching COMMITs, its own included. */
+  void TryCommit(RoundState& rs)
+  {
+    if (rs.committed || !rs.haveProposal || !rs.sentCommit) return;
+    if (rs.commitsBy[rs.proposed].size() < 2 * m_f + 1) return;
+    rs.committed = true;
+    rs.timer.Cancel();
+    m_viewTimeout = m_baseViewTimeout;   // a commit ends any backoff
+    RecordCommit(rs);
+  }
+
+  void ArmViewTimer(uint32_t round)
+  {
+    if (!m_vcEnabled) return;
+    RoundState& rs = m_rounds[round];
+    if (rs.committed || rs.timerArmed) return;
+    rs.timerArmed = true;
+    rs.timer = Simulator::Schedule(m_viewTimeout, &ConsensusApp::OnViewTimeout, this, round);
+  }
+
+  void OnViewTimeout(uint32_t round)
+  {
+    auto it = m_rounds.find(round);
+    if (it == m_rounds.end() || it->second.committed) return;
+    if (m_viewsEntered >= m_maxViews) return;
+    uint32_t target = m_view + 1;
+    if (m_requestedView >= target) return;   // one request per view
+    m_requestedView = target;
+    // All to all: an O(n^2) burst on a network whose windows were sized for the
+    // normal case.
+    Broadcast(VIEW_CHANGE, round, it->second.startNs, m_view, target, m_vcSize);
+    m_sentViewChange++;
+    m_viewVotes[target].insert(m_self);
+    MaybeEnterView(target);
+  }
+
+  void OnViewChange(const Hdr& h)
+  {
+    uint32_t target = h.digest;
+    if (target <= m_view) return;
+    m_viewVotes[target].insert(h.sender);
+    MaybeEnterView(target);
+  }
+
+  void MaybeEnterView(uint32_t target)
+  {
+    if (m_viewVotes[target].size() < 2 * m_f + 1) return;
+    // Votes keep arriving after the quorum; only the first entry acts.
+    if (!EnterView(target)) return;
+    if (IsPrimary())
+      {
+        Broadcast(NEW_VIEW, m_expected, Simulator::Now().GetNanoSeconds(), m_view, 0, m_nvSize);
+        m_sentNewView++;
+        std::vector<uint32_t> open;
+        for (auto& kv : m_rounds) if (!kv.second.committed) open.push_back(kv.first);
+        for (uint32_t r : open) Propose(r);
+      }
+  }
+
+  void OnNewView(const Hdr& h)
+  {
+    if (h.view <= m_view) return;
+    EnterView(h.view);
+  }
+
+  bool EnterView(uint32_t v)
+  {
+    if (v <= m_view) return false;
+    m_view = v;
+    m_viewsEntered++;
+    m_requestedView = 0;
+    // Exponential backoff (Castro-Liskov); reset by the next commit.
+    m_viewTimeout = m_viewTimeout * m_viewBackoff;
+    // Votes are per view; round identity and start time carry over.
+    for (auto& kv : m_rounds)
+      {
+        RoundState& rs = kv.second;
+        if (rs.committed) continue;
+        rs.preparesBy.clear();
+        rs.commitsBy.clear();
+        rs.sentPrepare = false;
+        rs.sentCommit = false;
+        rs.haveProposal = false;
+        rs.timer.Cancel();
+        rs.timerArmed = false;
+        if (!IsPrimary()) ArmViewTimer(kv.first);
+      }
+    // Replay what arrived early for this view; keep what belongs to a later one.
+    std::vector<Hdr> held;
+    held.swap(m_future);
+    for (const Hdr& h : held)
+      {
+        if (h.view == m_view) ProcessFull(h);
+        else if (h.view > m_view) m_future.push_back(h);
+      }
+    return true;
+  }
+
+  // ---- both ----------------------------------------------------------------------
+
+  void RecordCommit(RoundState& rs)
+  {
+    m_committed++;
+    // Time from the round first being opened (across view changes) to this
+    // node committing it. This is the metric that moves under gate
+    // quantisation; round and message counts do not until consensus fails.
+    int64_t lat = Simulator::Now().GetNanoSeconds() - rs.startNs;
+    m_latSum += lat;
+    m_latMax = std::max(m_latMax, lat);
+    m_latSamples.push_back(lat);
+    m_commitTrace(Simulator::Now());
+  }
+
+  void Broadcast(MsgType t, uint32_t round, int64_t startNs, uint32_t view = 0,
+                 uint32_t digest = 0, uint32_t size = 0)
   {
     // Zero first so the struct's alignment padding is deterministic, and build the whole
     // message in a zeroed buffer: Packet::AddPaddingAtEnd() leaves the bytes it adds
@@ -210,7 +533,10 @@ private:
     h.round = round;
     h.sender = m_self;
     h.startNs = startNs;
-    std::vector<uint8_t> buf(std::max<uint32_t>(m_msgSize, sizeof(h)), 0);
+    h.view = view;
+    h.digest = digest;
+    uint32_t bytes = size ? size : m_msgSize;
+    std::vector<uint8_t> buf(std::max<uint32_t>(bytes, sizeof(h)), 0);
     std::memcpy(buf.data(), &h, sizeof(h));
     for (auto& s : m_txSockets)
       {
@@ -237,57 +563,8 @@ private:
 
   void Process(Hdr h)
   {
-    RoundState& rs = m_rounds[h.round];
-    if (rs.startNs < 0) rs.startNs = h.startNs;
-
-    switch (h.type)
-      {
-      case PRE_PREPARE:
-        // Backups answer a PRE-PREPARE with a PREPARE. The primary does not
-        // send PREPARE; its PRE-PREPARE plays that role.
-        if (!IsPrimary() && !rs.sentPrepare)
-          {
-            rs.sentPrepare = true;
-            Broadcast(PREPARE, h.round, rs.startNs);
-            m_sentPrepare++;
-          }
-        break;
-
-      case PREPARE:
-        rs.prepares.insert(h.sender);
-        if (!rs.sentCommit && rs.prepares.size() >= 2 * m_f)
-          {
-            rs.sentCommit = true;
-            Broadcast(COMMIT, h.round, rs.startNs);
-            m_sentCommit++;
-          }
-        break;
-
-      case COMMIT:
-        rs.commits.insert(h.sender);
-        if (!rs.committed && rs.commits.size() >= 2 * m_f + 1)
-          {
-            rs.committed = true;
-            m_committed++;
-            // Time from the primary opening the round to this node holding
-            // 2f+1 COMMITs. This is the metric that moves under gate
-            // quantisation; round and message counts do not until consensus
-            // fails outright.
-            int64_t lat = Simulator::Now().GetNanoSeconds() - rs.startNs;
-            m_latSum += lat;
-            m_latMax = std::max(m_latMax, lat);
-            m_latSamples.push_back(lat);
-            m_commitTrace(Simulator::Now());
-          }
-        break;
-      }
-  }
-
-  /** Keep the round map bounded in long runs. */
-  void PruneOldRounds()
-  {
-    const uint32_t keep = 16;
-    while (m_rounds.size() > keep) m_rounds.erase(m_rounds.begin());
+    if (m_full) ProcessFull(h);
+    else ProcessV1(h);
   }
 
   std::vector<Ipv4Address> m_peers;
@@ -303,7 +580,19 @@ private:
 
   std::map<uint32_t, RoundState> m_rounds;
 
+  // full model
+  bool     m_full{false};
+  bool     m_vcEnabled{false};
+  uint32_t m_expected{0};
+  uint32_t m_view{0}, m_requestedView{0}, m_viewsEntered{0}, m_maxViews{64};
+  Time     m_viewTimeout, m_baseViewTimeout;
+  double   m_viewBackoff{2.0};
+  uint32_t m_vcSize{0}, m_nvSize{0};
+  std::map<uint32_t, std::set<uint32_t>> m_viewVotes;
+  std::vector<Hdr> m_future;
+
   uint32_t m_sentPrePrepare{0}, m_sentPrepare{0}, m_sentCommit{0};
+  uint32_t m_sentViewChange{0}, m_sentNewView{0}, m_overtaken{0};
   uint32_t m_committed{0}, m_msgsSent{0};
   int64_t  m_latSum{0}, m_latMax{0};
   std::vector<int64_t> m_latSamples;
@@ -462,6 +751,14 @@ int main(int argc, char* argv[])
   std::string linkRate = "1Gbps";
   std::string latencyCsv = "";
   std::string consensusCsv = "";
+  std::string pbftModel = "v1";
+  bool     viewChange = true;
+  Time     viewTimeout = Seconds(-1);   // negative: 4 x consensusInterval
+  double   viewBackoff = 2.0;
+  uint32_t maxViewChanges = 64;
+  uint32_t viewChangeSize = 0;          // 0: consensusMsgSize
+  uint32_t newViewSize = 0;             // 0: consensusMsgSize
+  bool     pbftStats = false;
   bool consensusInBe = false;
   Time     perHopOffset = MicroSeconds(-1);   // negative => derive automatically
   Time     cooldown = MilliSeconds(100);
@@ -588,6 +885,22 @@ int main(int argc, char* argv[])
   cmd.AddValue("pcapStop",
                "Stop capturing at this time. Negative = at stopAt - cooldown",
                pcapStop);
+  cmd.AddValue("pbftModel",
+               "v1 = release 1.x normal case, reproduced exactly (static primary, no view "
+               "change); full = per-digest quorums, own COMMIT counted, view change",
+               pbftModel);
+  cmd.AddValue("viewChange", "full model: enable the view change", viewChange);
+  cmd.AddValue("viewTimeout",
+               "full model: time from a round's start until a backup that has not committed "
+               "it asks for a view change. Negative = 4 x --consensusInterval", viewTimeout);
+  cmd.AddValue("viewBackoff", "full model: timeout multiplier per view entered, reset by a commit",
+               viewBackoff);
+  cmd.AddValue("maxViewChanges", "full model: views a node may enter in one run", maxViewChanges);
+  cmd.AddValue("viewChangeSize", "full model: VIEW-CHANGE size in bytes (0 = consensusMsgSize)",
+               viewChangeSize);
+  cmd.AddValue("newViewSize", "full model: NEW-VIEW size in bytes (0 = consensusMsgSize)",
+               newViewSize);
+  cmd.AddValue("pbftStats", "print the pbft model section in the v1 model too", pbftStats);
   cmd.Parse(argc, argv);
 
   NS_ABORT_MSG_IF(shaper != "tas" && shaper != "prio" && shaper != "fifo",
@@ -714,10 +1027,16 @@ int main(int argc, char* argv[])
   Time consSlice = NanoSeconds(consWindow.GetNanoSeconds() / consSlices);
   Time beSlice   = NanoSeconds(beWindow.GetNanoSeconds() / consSlices);
   CheckWindowFeasibility("control (class 6)", rate, ctrlPayload, ctrlWindow);
+  NS_ABORT_MSG_IF(pbftModel != "v1" && pbftModel != "full", "--pbftModel must be v1 or full");
+  const bool fullModel = (pbftModel == "full");
+  if (viewTimeout < Time(0)) viewTimeout = consensusInterval * 4;
+  NS_ABORT_MSG_IF(viewBackoff < 1.0, "--viewBackoff must be at least 1.0");
+  NS_ABORT_MSG_IF((viewChangeSize && viewChangeSize < 32) || (newViewSize && newViewSize < 32),
+                  "--viewChangeSize and --newViewSize must be 0 or at least 32 B");
   NS_ABORT_MSG_IF(nValidators > 0 && consensusMsgSize < 32,
                   "consensusMsgSize must be at least 32 B: the consensus "
-                  "header (type, round, sender, startNs) is 24 B after "
-                  "padding and would be truncated.");
+                  "header (type, round, sender, startNs, view, digest) is "
+                  "32 B and would be truncated.");
   if (nValidators > 0)
     {
       CheckWindowFeasibility(consensusInBe ? "consensus (in best effort)"
@@ -974,6 +1293,9 @@ int main(int argc, char* argv[])
     {
       Ptr<ConsensusApp> app = CreateObject<ConsensusApp>();
       app->Setup(valAddrs, i, 7000, consensusInterval, consensusMsgSize, verifyDelay, consensusInBe);
+      if (fullModel)
+        app->SetFullModel(viewChange, viewTimeout, viewBackoff, maxViewChanges,
+                          viewChangeSize, newViewSize);
       validators.Get(i)->AddApplication(app);
       app->SetStartTime(Seconds(0.2) + roundPhase);
       app->SetStopTime(stopAt);
@@ -1091,7 +1413,7 @@ int main(int argc, char* argv[])
     return allLat[static_cast<size_t>(q * (allLat.size() - 1))] / 1000.0;
   };
 
-  uint32_t rounds = consensusApps.empty() ? 0 : consensusApps[0]->GetSentPrePrepare();
+  uint32_t rounds = consensusApps.empty() ? 0 : consensusApps[0]->GetRoundsOpened();
   uint32_t n = nValidators;
   uint32_t expectedPerRound = (n - 1) + (n - 1) * (n - 1) + n * (n - 1);
 
@@ -1111,6 +1433,32 @@ int main(int argc, char* argv[])
             << "  commit latency p50  " << latPct(0.50) << " us\n"
             << "  commit latency p99  " << latPct(0.99) << " us\n"
             << "  commit latency max  " << latMax / 1000.0 << " us\n";
+
+  if (fullModel || pbftStats)
+    {
+      uint32_t vcs = 0, nvs = 0, over = 0, entered = 0, viewMax = 0;
+      for (auto& a : consensusApps)
+        {
+          vcs += a->GetSentViewChange();
+          nvs += a->GetSentNewView();
+          over += a->GetOvertaken();
+          entered += a->GetViewsEntered();
+          viewMax = std::max(viewMax, a->GetView());
+        }
+      std::cout << "\n=== pbft model ===\n"
+                << "  model               " << pbftModel;
+      if (fullModel)
+        std::cout << "  (view change " << (viewChange ? "on" : "off")
+                  << ", timeout " << viewTimeout.GetMicroSeconds() << " us, backoff "
+                  << viewBackoff << ", VIEW-CHANGE "
+                  << (viewChangeSize ? viewChangeSize : consensusMsgSize) << " B, NEW-VIEW "
+                  << (newViewSize ? newViewSize : consensusMsgSize) << " B)";
+      std::cout << "\n"
+                << "  broadcasts  view-change " << vcs << "  new-view " << nvs << "\n"
+                << "  views entered       " << entered << "  (highest view " << viewMax << ")\n"
+                << "  prepares before pre-prepare  " << over
+                << "  node-rounds with PREPAREs from 2f senders before the PRE-PREPARE\n";
+    }
 
   taps.Report(std::cout);
   if (!taps.Empty())

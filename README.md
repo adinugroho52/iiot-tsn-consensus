@@ -74,6 +74,10 @@ LICENSE.md                                                          MIT Licence
 | `--consensusInBe` | false | send consensus in best effort |
 | `--warmup`, `--stopAt`, `--cooldown`, `--run` | 0.5 s, 2.0 s, 100 ms, 1 | measurement window and RNG run |
 | `--latencyCsv`, `--consensusCsv` | off | per-frame latency and per-commit latency |
+| `--pbftModel` | `v1` | `v1`: the normal case of release 1.x, reproduced exactly; `full`: per-digest quorums, own COMMIT counted, rotating primary and view change |
+| `--viewChange`, `--viewTimeout`, `--viewBackoff`, `--maxViewChanges` | on, 4 × round interval, 2, 64 | view change in the `full` model |
+| `--viewChangeSize`, `--newViewSize` | 0 (= `--consensusMsgSize`) | size charged for VIEW-CHANGE and NEW-VIEW |
+| `--pbftStats` | false | print the "pbft model" report section in the `v1` model too |
 | `--pcap*` | off | see `docs/CAPTURES.md` |
 
 `./ns3 run "iiot-consensus-tsn --PrintHelp"` lists everything. The model is deterministic unless a random option is on.
