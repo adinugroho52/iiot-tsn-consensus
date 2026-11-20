@@ -49,6 +49,7 @@
 #include <cstring>
 #include <cmath>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <set>
 #include <sstream>
@@ -56,6 +57,20 @@
 #include <vector>
 
 using namespace ns3;
+
+/**
+ * Peak backlog of one TAS class queue on one port. A view change sends a burst
+ * (VIEW-CHANGE, NEW-VIEW, re-proposed rounds) that the consensus window drains
+ * only at its spare capacity; the peak shows how close it came to the class
+ * queue's limit, past which frames are dropped.
+ */
+struct QueuePeak : public SimpleRefCount<QueuePeak>
+{
+  std::string port;
+  Ptr<QueueDisc> root;
+  uint32_t peak{0};
+  void Track(uint32_t /*old*/, uint32_t now) { peak = std::max(peak, now); }
+};
 
 NS_LOG_COMPONENT_DEFINE("IiotConsensusTsn");
 
@@ -117,6 +132,18 @@ static const uint32_t CLASS_BE        = 1;   // from ToS 0x00 -> prio 0
 //         Not modelled: certificates inside VIEW-CHANGE and NEW-VIEW (only their
 //         size is charged, --viewChangeSize and --newViewSize), checkpoints,
 //         and the f+1 rule for joining a view change early.
+//
+// Other protocols, chosen with --protocol (on the full model's round clock,
+// timeouts, adversary hooks and oracle; details at the HsTick and RaftTick code):
+//   hotstuff  chained HotStuff: leader v mod n proposes block v to all, every
+//             replica votes to the next leader, 3-chain commit. 2(n-1) messages
+//             per round; a missing proposal costs a pacemaker timeout and a
+//             NEW-VIEW to the next leader, not an all-to-all burst.
+//   raft      crash faults only: a fixed leader's AppendEntries to each follower
+//             and their acknowledgements, 2(n-1) per round; elections on a
+//             randomised timeout. --attack=equivocate is refused.
+// A message carrying k rounds of payload (a block after a stall, Raft entries
+// for a follower that fell behind) is sent as k frames.
 //
 // Byzantine behaviours (adversary.h, full model only), active inside the
 // attack window [attackStart, attackStop):
@@ -193,7 +220,15 @@ public:
    * this option existed.
    */
   void SetReproposeWindow(uint32_t k) { m_reproposeWindow = k; }
+
+  enum Proto : uint8_t { PROTO_PBFT, PROTO_HOTSTUFF, PROTO_RAFT };
+  /** HotStuff or Raft instead of PBFT. Needs SetFullModel (timeouts, backoff, cap). */
+  void SetProtocol(Proto p) { m_proto = p; }
+  /** Raft: entries per follower per tick (0 = everything outstanding at once). */
+  void SetRaftCatchup(uint32_t k) { m_rfCatchup = k; }
   uint32_t GetAbandoned() const { return m_abandoned; }
+  uint32_t GetEscalations() const { return m_escalations; }
+  bool AtViewCap() const { return m_full && m_viewsEntered >= m_maxViews; }
 
   /** Make this node Byzantine (full model). bits: AdvBit mask from adversary.h. */
   void SetAdversary(uint32_t bits, Time start, Time stop, uint32_t floodFactor, Time attackDelay)
@@ -230,10 +265,15 @@ public:
   // Rounds the round clock opened: the primary's PRE-PREPAREs in v1, every
   // node's clock ticks in full (all nodes tick together).
   uint32_t GetRoundsOpened()   const { return m_full ? m_expected : m_sentPrePrepare; }
+  bool IsHotStuff() const { return m_proto == PROTO_HOTSTUFF; }
+  bool IsRaft() const { return m_proto == PROTO_RAFT; }
   uint32_t GetSentViewChange() const { return m_sentViewChange; }
   uint32_t GetSentNewView()    const { return m_sentNewView; }
   uint32_t GetViewsEntered()   const { return m_viewsEntered; }
-  uint32_t GetView()           const { return m_view; }
+  uint32_t GetView() const
+  {
+    return m_proto == PROTO_HOTSTUFF ? m_hsView : m_proto == PROTO_RAFT ? m_rfTerm : m_view;
+  }
   /** Rounds in which PREPAREs from 2f senders arrived before the PRE-PREPARE. */
   uint32_t GetOvertaken()      const { return m_overtaken; }
 
@@ -299,7 +339,18 @@ private:
           }
       }
 
-    if (m_full)
+    m_startNs = Simulator::Now().GetNanoSeconds();
+    if (m_proto == PROTO_HOTSTUFF)
+      {
+        m_hsBlocks[0].certified = m_hsBlocks[0].committed = true;   // genesis
+        m_roundEvent = Simulator::Schedule(m_roundInterval, &ConsensusApp::HsTick, this);
+      }
+    else if (m_proto == PROTO_RAFT)
+      {
+        RfInit();
+        m_roundEvent = Simulator::Schedule(m_roundInterval, &ConsensusApp::RaftTick, this);
+      }
+    else if (m_full)
       {
         m_roundEvent = Simulator::Schedule(m_roundInterval, &ConsensusApp::RoundTick, this);
       }
@@ -313,6 +364,8 @@ private:
   void StopApplication() override
   {
     m_roundEvent.Cancel();
+    m_hsTimer.Cancel();
+    m_rfElection.Cancel();
     for (auto& kv : m_rounds) kv.second.timer.Cancel();
     if (m_rxSocket) m_rxSocket->Close();
   }
@@ -539,8 +592,19 @@ private:
     // not: part of why recovery needs 2f+1 requests rather than f+1.
     if (Acts(ADV_CRASH) || Acts(ADV_WITHHOLD)) return;
     uint32_t target = m_view + 1;
-    if (m_requestedView >= target) return;   // one request per view
+    if (m_requestedView >= target)
+      {
+        // Already asked. Castro-Liskov: if the NEW-VIEW does not come within the
+        // timeout (a VIEW-CHANGE or NEW-VIEW may have been lost, or the next
+        // primary is faulty too), ask for the view after it and wait twice as
+        // long. Without this, one lost message stops the node for good.
+        if (Simulator::Now() - m_requestedAt < m_viewTimeout) return;
+        target = m_requestedView + 1;
+        m_viewTimeout = m_viewTimeout * m_viewBackoff;
+        m_escalations++;
+      }
     m_requestedView = target;
+    m_requestedAt = Simulator::Now();
     // All to all: an O(n^2) burst on a network whose windows were sized for the
     // normal case.
     Broadcast(VIEW_CHANGE, round, it->second.startNs, m_view, target, m_vcSize);
@@ -571,15 +635,18 @@ private:
     if (m_viewsEntered >= m_maxViews) return;
     std::set<uint32_t> senders;
     uint32_t smallest = 0;
-    for (auto it = m_viewVotes.upper_bound(m_view); it != m_viewVotes.end(); ++it)
+    // Views above any this node is already waiting for.
+    const uint32_t above = std::max(m_view, m_requestedView);
+    for (auto it = m_viewVotes.upper_bound(above); it != m_viewVotes.end(); ++it)
       for (uint32_t s : it->second)
         if (s != m_self)
           {
             senders.insert(s);
             if (!smallest) smallest = it->first;
           }
-    if (senders.size() < m_f + 1 || m_requestedView >= smallest) return;
+    if (senders.size() < m_f + 1) return;
     m_requestedView = smallest;
+    m_requestedAt = Simulator::Now();
     Broadcast(VIEW_CHANGE, m_expected, Simulator::Now().GetNanoSeconds(), m_view, smallest,
               m_vcSize);
     m_sentViewChange++;
@@ -656,6 +723,445 @@ private:
     return true;
   }
 
+  // ---- HotStuff (chained) and Raft: traffic models on the same round clock ----------
+  //
+  // Both reuse the sockets, the round clock (one request per tick, known to every
+  // node, as in the full PBFT model), the adversary hooks and the oracle. A
+  // message that carries k rounds of payload is sent as k frames (k-1
+  // continuation frames, then the frame with the header), so a block or an
+  // AppendEntries covering a backlog is charged like PBFT's re-proposed rounds.
+  // Receivers act on the header frame only.
+
+  static constexpr uint8_t CONT = 0x80;     // continuation frame: bandwidth only
+  enum ProtoMsg : uint8_t { HS_PROPOSAL = 10, HS_VOTE = 11, HS_NEWVIEW = 12,
+                            RF_APPEND = 20, RF_ACK = 21, RF_REQVOTE = 22, RF_VOTE = 23 };
+
+  int64_t TickNs(uint32_t r) const { return m_startNs + int64_t(r) * m_roundInterval.GetNanoSeconds(); }
+  size_t SlotOf(uint32_t node) const { return node < m_self ? node : node - 1; }
+  uint32_t QuorumBft() const { return m_n - m_f; }          // 2f+1 when n = 3f+1
+  uint32_t Majority() const { return m_n / 2 + 1; }
+
+  /** k frames to one node: k-1 continuations, then the header. Floods and crashes apply. */
+  void SendFrames(uint32_t node, const std::vector<uint8_t>& buf, uint32_t k)
+  {
+    if (Acts(ADV_CRASH) || node == m_self) return;
+    std::vector<uint8_t> cont;
+    if (k > 1) { cont = buf; cont[0] |= CONT; }
+    uint32_t reps = Acts(ADV_FLOOD) ? m_floodFactor : 1;
+    for (uint32_t r = 0; r < reps; ++r)
+      {
+        for (uint32_t e = 1; e < k; ++e) SendTo(SlotOf(node), cont);
+        SendTo(SlotOf(node), buf);
+        if (r > 0) m_floodExtra += k;
+      }
+  }
+
+  /** One round's commit at this node: latency from the round's tick. */
+  void CommitRound(uint32_t r, uint32_t digestId)
+  {
+    m_committed++;
+    if (m_oracle && Trusted()) m_oracle->NoteCommit(r, m_self, digestId, Simulator::Now().GetNanoSeconds());
+    int64_t lat = Simulator::Now().GetNanoSeconds() - TickNs(r);
+    m_latSum += lat;
+    m_latMax = std::max(m_latMax, lat);
+    m_latSamples.push_back(lat);
+    m_commitTrace(Simulator::Now());
+    m_viewTimeout = m_baseViewTimeout;      // progress ends any backoff
+  }
+
+  // ---- chained HotStuff ---------------------------------------------------------------
+  //
+  // View v has leader v mod n and (normally) one block. The leader of v proposes
+  // once it holds a QC for v-1 (2f+1 votes, sent to it by every replica that
+  // accepted block v-1) or 2f+1 NEW-VIEWs for v, and not before tick v. A block
+  // carries the rounds since its parent's last one. Every replica that accepts
+  // block v votes for it to the leader of v+1. A block commits when its
+  // great-grandchild arrives (three certified blocks chained on it: the 3-chain
+  // rule). A replica that gets no proposal for its view within the timeout (from
+  // tick v) sends NEW-VIEW with its highest QC to the next leader and moves on;
+  // timeouts back off and reset on a commit.
+  // Not modelled: the lock/safeNode check (honest leaders always extend the
+  // highest QC they hold, and an equivocating leader's halves never certify),
+  // signature aggregation (a QC rides in the proposal at no extra size), and
+  // block sync (a replica that missed a block cannot commit through it).
+
+  struct HsBlock
+  {
+    uint32_t digest{0}, parent{0}, first{0}, last{0};
+    bool certified{false}, committed{false};
+  };
+
+  uint32_t HsLeader(uint32_t v) const { return v % m_n; }
+  static uint32_t HsDigestId(uint32_t v, uint32_t digest) { return (v << 1) | (digest ? 1u : 0u); }
+
+  void HsTick()
+  {
+    m_expected++;
+    HsMaybePropose(m_hsHighQC + 1);
+    for (auto& kv : m_hsNewViews) HsMaybePropose(kv.first);
+    if (m_hsView == m_expected && !m_hsTimer.IsPending()) HsArmTimer();
+    m_roundEvent = Simulator::Schedule(m_roundInterval, &ConsensusApp::HsTick, this);
+  }
+
+  void HsMaybePropose(uint32_t v)
+  {
+    if (HsLeader(v) != m_self || v <= m_hsProposed || v > m_expected || Acts(ADV_CRASH)) return;
+    auto nv = m_hsNewViews.find(v);
+    bool viaQc = (m_hsHighQC == v - 1);
+    bool viaNv = nv != m_hsNewViews.end() && nv->second.size() >= QuorumBft();
+    if (!viaQc && !viaNv) return;
+    auto par = m_hsBlocks.find(m_hsHighQC);
+    if (par == m_hsBlocks.end()) return;
+    m_hsProposed = v;
+    if (viaNv && !viaQc) m_sentNewView++;          // proposals that end a timeout
+    HsBlock b;
+    b.parent = m_hsHighQC;
+    b.first = par->second.last + 1;
+    b.last = std::max(m_expected, b.first - 1);     // empty when the parent already covers now
+    uint32_t k = std::max<uint32_t>(1, b.last + 1 - b.first);
+    if (m_oracle)
+      for (uint32_t r = b.first; r <= b.last; ++r) m_oracle->NoteRoundOpened(r, TickNs(r));
+    int64_t packed = (int64_t(b.parent) << 32) | b.first;
+    std::vector<uint8_t> honest = MakeMsg(MsgType(HS_PROPOSAL), b.last, packed, v, 0, 0);
+    if (Acts(ADV_EQUIVOCATE))
+      {
+        std::vector<uint8_t> fork = MakeMsg(MsgType(HS_PROPOSAL), b.last, packed, v, ForkedDigest(v), 0);
+        uint32_t half = (m_n - 1) / 2, k2 = 0;
+        for (uint32_t i = 0; i < m_n; ++i)
+          if (i != m_self) SendFrames(i, (k2++ < half) ? honest : fork, k);
+        m_equivocations++;
+      }
+    else
+      {
+        for (uint32_t i = 0; i < m_n; ++i) SendFrames(i, honest, k);
+      }
+    m_sentPrePrepare++;
+    Hdr self;
+    std::memcpy(&self, honest.data(), sizeof(self));
+    HsOnProposal(self);                              // the leader accepts and votes too
+  }
+
+  void HsOnProposal(const Hdr& h)
+  {
+    uint32_t v = h.view;
+    if (h.sender != HsLeader(v) || m_hsBlocks.count(v)) return;
+    HsBlock b;
+    b.digest = h.digest;
+    b.parent = uint32_t(uint64_t(h.startNs) >> 32);
+    b.first = uint32_t(uint64_t(h.startNs) & 0xFFFFFFFFu);
+    b.last = h.round;
+    m_hsBlocks[v] = b;
+    // Votes for v may have reached this node (the next leader) before the block.
+    auto early = m_hsVotes.find(v);
+    if (early != m_hsVotes.end() && early->second[b.digest].size() >= QuorumBft())
+      {
+        m_hsBlocks[v].certified = true;
+        if (v > m_hsHighQC) m_hsHighQC = v;
+      }
+    // The proposal carries a QC for its parent.
+    auto p = m_hsBlocks.find(b.parent);
+    if (p != m_hsBlocks.end())
+      {
+        p->second.certified = true;
+        if (b.parent > m_hsHighQC) m_hsHighQC = b.parent;
+        // 3-chain: block -> parent (b'') -> b' -> b; commit b.
+        auto b1 = m_hsBlocks.find(p->second.parent);
+        if (b1 != m_hsBlocks.end() && p->first != 0)
+          {
+            auto b0 = m_hsBlocks.find(b1->second.parent);
+            if (b0 != m_hsBlocks.end() && b1->first != 0) HsCommitChain(b0->first);
+          }
+      }
+    if (v > m_hsLastVoted && !Acts(ADV_WITHHOLD))
+      {
+        m_hsLastVoted = v;
+        uint32_t next = HsLeader(v + 1);
+        std::vector<uint8_t> vote = MakeMsg(MsgType(HS_VOTE), v, 0, v, h.digest, 0);
+        if (next == m_self) HsOnVoteFrom(m_self, v, h.digest);
+        else SendFrames(next, vote, 1);
+        m_sentPrepare++;
+      }
+    if (v >= m_hsView)
+      {
+        m_hsView = v + 1;
+        HsArmTimer();
+      }
+    HsMaybePropose(m_hsHighQC + 1);
+  }
+
+  void HsCommitChain(uint32_t v)
+  {
+    // Commit v and every uncommitted ancestor this node holds, oldest first.
+    std::vector<uint32_t> chain;
+    for (auto it = m_hsBlocks.find(v); it != m_hsBlocks.end() && !it->second.committed && it->first != 0;
+         it = m_hsBlocks.find(it->second.parent))
+      chain.push_back(it->first);
+    for (auto i = chain.rbegin(); i != chain.rend(); ++i)
+      {
+        HsBlock& b = m_hsBlocks[*i];
+        b.committed = true;
+        for (uint32_t r = b.first; r <= b.last; ++r) CommitRound(r, HsDigestId(*i, b.digest));
+      }
+  }
+
+  void HsOnVoteFrom(uint32_t sender, uint32_t v, uint32_t digest)
+  {
+    auto& voters = m_hsVotes[v][digest];
+    voters.insert(sender);
+    if (voters.size() < QuorumBft()) return;
+    auto it = m_hsBlocks.find(v);
+    if (it == m_hsBlocks.end() || it->second.digest != digest) return;   // need the block to extend it
+    it->second.certified = true;
+    if (v > m_hsHighQC) m_hsHighQC = v;
+    HsMaybePropose(v + 1);
+  }
+
+  void HsArmTimer()
+  {
+    m_hsTimer.Cancel();
+    if (!m_vcEnabled) return;
+    int64_t from = std::max(Simulator::Now().GetNanoSeconds(), TickNs(m_hsView));
+    Time at = NanoSeconds(from) + m_viewTimeout - Simulator::Now();
+    m_hsTimer = Simulator::Schedule(at, &ConsensusApp::HsOnTimeout, this, m_hsView);
+  }
+
+  void HsOnTimeout(uint32_t view)
+  {
+    if (view != m_hsView || m_viewsEntered >= m_maxViews) return;
+    if (Acts(ADV_CRASH) || Acts(ADV_WITHHOLD)) { HsArmTimer(); return; }
+    uint32_t target = view + 1, next = HsLeader(target);
+    std::vector<uint8_t> nv = MakeMsg(MsgType(HS_NEWVIEW), m_hsHighQC, 0, target, 0, m_vcSize);
+    if (next == m_self) HsOnNewViewFrom(m_self, target);
+    else SendFrames(next, nv, 1);
+    m_sentViewChange++;
+    m_hsView = target;
+    m_viewsEntered++;
+    if (m_oracle && Trusted()) m_oracle->NoteViewChange(m_self, target);
+    m_viewTimeout = m_viewTimeout * m_viewBackoff;
+    HsArmTimer();
+  }
+
+  void HsOnNewViewFrom(uint32_t sender, uint32_t target)
+  {
+    if (target <= m_hsProposed) return;
+    m_hsNewViews[target].insert(sender);
+    HsMaybePropose(target);
+  }
+
+  void HsProcess(const Hdr& h)
+  {
+    switch (h.type)
+      {
+      case HS_PROPOSAL: HsOnProposal(h); break;
+      case HS_VOTE:     HsOnVoteFrom(h.sender, h.view, h.digest); break;
+      case HS_NEWVIEW:  HsOnNewViewFrom(h.sender, h.view); break;
+      default: break;
+      }
+    // Bound the per-view maps: views far behind the highest QC are settled.
+    while (!m_hsVotes.empty() && m_hsVotes.begin()->first + 256 < m_hsHighQC) m_hsVotes.erase(m_hsVotes.begin());
+    while (!m_hsNewViews.empty() && m_hsNewViews.begin()->first <= m_hsProposed &&
+           m_hsNewViews.begin()->first + 256 < m_hsHighQC)
+      m_hsNewViews.erase(m_hsNewViews.begin());
+  }
+
+  // ---- Raft ---------------------------------------------------------------------------
+  //
+  // Validator 0 leads term 1. At every tick the leader appends the round to its
+  // log and sends each follower an AppendEntries with everything from that
+  // follower's next index (one frame per entry, one header frame when there is
+  // nothing new: the heartbeat), assuming delivery (next index moves on). A
+  // follower accepts entries that continue its log and acknowledges its last
+  // index, or rejects with it, and the leader resends from there. The leader
+  // commits an index held by a majority; followers commit what the next
+  // AppendEntries reports. A follower that hears no leader for a randomised
+  // [1, 2) x timeout starts an election (RequestVote to all, votes to the
+  // candidate, majority wins); the new leader appends the rounds that ticked
+  // without a leader and resumes. Crash faults only: Raft has no defence against
+  // equivocation, so --attack=equivocate is refused.
+  // Not modelled: log conflicts (every entry is the round's request, the same in
+  // any term) and the current-term commit rule.
+
+  enum RfRole : uint8_t { RF_FOLLOWER, RF_CANDIDATE, RF_LEADER };
+
+  void RfInit()
+  {
+    m_rfRng = CreateObject<UniformRandomVariable>();
+    m_rfRng->SetStream(1000 + m_self);
+    m_rfNext.assign(m_n, 1);
+    m_rfMatch.assign(m_n, 0);
+    m_rfTerm = 1;
+    m_rfLeader = 0;
+    m_rfRole = (m_self == 0) ? RF_LEADER : RF_FOLLOWER;
+    if (m_rfRole != RF_LEADER) RfArmElection();
+  }
+
+  void RaftTick()
+  {
+    m_expected++;
+    // A crashed node loses its volatile state: it restarts as a follower and
+    // catches up from whoever leads by then (Raft's crash recovery).
+    if (Acts(ADV_CRASH) && m_rfRole != RF_FOLLOWER)
+      {
+        m_rfRole = RF_FOLLOWER;
+        RfArmElection();
+      }
+    if (m_rfRole == RF_LEADER && !Acts(ADV_CRASH))
+      {
+        RfAppendUpTo(m_expected);
+        RfSendAppends();
+      }
+    m_roundEvent = Simulator::Schedule(m_roundInterval, &ConsensusApp::RaftTick, this);
+  }
+
+  void RfAppendUpTo(uint32_t r)
+  {
+    for (uint32_t i = m_rfLast + 1; i <= r; ++i)
+      if (m_oracle) m_oracle->NoteRoundOpened(i, TickNs(i));
+    m_rfLast = std::max(m_rfLast, r);
+    m_rfMatch[m_self] = m_rfLast;
+  }
+
+  void RfSendAppends()
+  {
+    for (uint32_t i = 0; i < m_n; ++i)
+      {
+        if (i == m_self) continue;
+        uint32_t first = m_rfNext[i];
+        uint32_t k = m_rfLast >= first ? m_rfLast - first + 1 : 0;
+        // Flow control (etcd's MaxSizePerMsg): at most m_rfCatchup entries per
+        // follower per tick, so a follower far behind is caught up over several
+        // ticks instead of in one burst through the leader's uplink.
+        if (m_rfCatchup && k > m_rfCatchup) k = m_rfCatchup;
+        uint32_t last = first + k - 1;                    // first - 1 for a heartbeat
+        std::vector<uint8_t> m = MakeMsg(MsgType(RF_APPEND), last, first, m_rfTerm, m_rfCommit, 0);
+        SendFrames(i, m, std::max<uint32_t>(1, k));
+        m_rfNext[i] = first + k;
+        m_sentPrePrepare++;
+      }
+    RfAdvanceCommit();
+  }
+
+  void RfArmElection()
+  {
+    m_rfElection.Cancel();
+    if (!m_vcEnabled) return;
+    Time t = m_viewTimeout * (1.0 + m_rfRng->GetValue(0.0, 1.0));
+    m_rfElection = Simulator::Schedule(t, &ConsensusApp::RfOnElection, this);
+  }
+
+  void RfStepDown(uint32_t term)
+  {
+    m_rfTerm = term;
+    m_rfRole = RF_FOLLOWER;
+    RfArmElection();
+  }
+
+  void RfOnElection()
+  {
+    if (m_rfRole == RF_LEADER) return;
+    if (Acts(ADV_CRASH) || Acts(ADV_WITHHOLD) || m_viewsEntered >= m_maxViews) { RfArmElection(); return; }
+    m_rfTerm++;
+    m_rfRole = RF_CANDIDATE;
+    m_rfVotedTerm = m_rfTerm;
+    m_rfVotes.clear();
+    m_rfVotes.insert(m_self);
+    m_viewsEntered++;
+    if (m_oracle && Trusted()) m_oracle->NoteViewChange(m_self, m_rfTerm);
+    std::vector<uint8_t> m = MakeMsg(MsgType(RF_REQVOTE), m_rfLast, 0, m_rfTerm, 0, m_vcSize);
+    for (uint32_t i = 0; i < m_n; ++i) SendFrames(i, m, 1);
+    m_sentViewChange++;
+    RfArmElection();                                 // a split vote retries
+  }
+
+  void RfBecomeLeader()
+  {
+    m_rfRole = RF_LEADER;
+    m_rfLeader = m_self;
+    m_rfElection.Cancel();
+    m_sentNewView++;
+    uint32_t had = m_rfLast;
+    RfAppendUpTo(m_expected);                         // requests that arrived leaderless
+    for (uint32_t i = 0; i < m_n; ++i) { m_rfNext[i] = had + 1; m_rfMatch[i] = 0; }
+    m_rfMatch[m_self] = m_rfLast;
+    RfSendAppends();
+  }
+
+  void RfAdvanceCommit()
+  {
+    std::vector<uint32_t> m = m_rfMatch;
+    std::sort(m.begin(), m.end(), std::greater<uint32_t>());
+    uint32_t c = m[Majority() - 1];
+    if (c > m_rfCommit) { m_rfCommit = c; RfApply(c); }
+  }
+
+  void RfApply(uint32_t c)
+  {
+    for (uint32_t r = m_rfApplied + 1; r <= c; ++r) CommitRound(r, 0);
+    m_rfApplied = std::max(m_rfApplied, c);
+  }
+
+  void RaftProcess(const Hdr& h)
+  {
+    switch (h.type)
+      {
+      case RF_APPEND:
+        {
+          if (h.view < m_rfTerm)
+            {
+              std::vector<uint8_t> a = MakeMsg(MsgType(RF_ACK), m_rfLast, 0, m_rfTerm, 0, 0);
+              SendFrames(h.sender, a, 1);
+              return;
+            }
+          if (h.view > m_rfTerm || m_rfRole != RF_FOLLOWER) RfStepDown(h.view);
+          m_rfLeader = h.sender;
+          RfArmElection();
+          uint32_t first = uint32_t(h.startNs);
+          bool ok = first <= m_rfLast + 1;
+          if (ok) m_rfLast = std::max(m_rfLast, h.round);
+          if (!Acts(ADV_WITHHOLD))
+            {
+              std::vector<uint8_t> a = MakeMsg(MsgType(RF_ACK), m_rfLast, 0, m_rfTerm, ok ? 1 : 0, 0);
+              SendFrames(h.sender, a, 1);
+              m_sentPrepare++;
+            }
+          RfApply(std::min(h.digest, m_rfLast));
+          m_rfCommit = std::max(m_rfCommit, std::min(h.digest, m_rfLast));
+          break;
+        }
+      case RF_ACK:
+        if (h.view > m_rfTerm) { RfStepDown(h.view); return; }
+        if (m_rfRole != RF_LEADER || h.view != m_rfTerm) return;
+        if (h.digest)
+          {
+            m_rfMatch[h.sender] = std::max(m_rfMatch[h.sender], h.round);
+            RfAdvanceCommit();
+          }
+        else
+          m_rfNext[h.sender] = h.round + 1;           // resent at the next tick
+        break;
+      case RF_REQVOTE:
+        if (h.view > m_rfTerm) RfStepDown(h.view);
+        if (h.view == m_rfTerm && m_rfVotedTerm != m_rfTerm && h.round >= m_rfLast &&
+            !Acts(ADV_WITHHOLD))
+          {
+            m_rfVotedTerm = m_rfTerm;
+            std::vector<uint8_t> v = MakeMsg(MsgType(RF_VOTE), m_rfLast, 0, m_rfTerm, 0, 0);
+            SendFrames(h.sender, v, 1);
+            m_sentPrepare++;
+            RfArmElection();
+          }
+        break;
+      case RF_VOTE:
+        if (m_rfRole == RF_CANDIDATE && h.view == m_rfTerm)
+          {
+            m_rfVotes.insert(h.sender);
+            if (m_rfVotes.size() >= Majority()) RfBecomeLeader();
+          }
+        break;
+      default: break;
+      }
+  }
+
   // ---- both ----------------------------------------------------------------------
 
   void RecordCommit(uint32_t round, RoundState& rs)
@@ -729,6 +1235,7 @@ private:
         if (p->GetSize() < sizeof(Hdr)) continue;
         Hdr h;
         p->CopyData(reinterpret_cast<uint8_t*>(&h), sizeof(h));
+        if (h.type & CONT) continue;           // payload continuation (HotStuff, Raft)
         // A crashed node neither sends nor processes.
         if (Acts(ADV_CRASH)) continue;
         // Signature verification cost. Calibrate from your own testbed
@@ -742,6 +1249,8 @@ private:
 
   void Process(Hdr h)
   {
+    if (m_proto == PROTO_HOTSTUFF) { HsProcess(h); return; }
+    if (m_proto == PROTO_RAFT) { RaftProcess(h); return; }
     if (m_full) ProcessFull(h);
     else ProcessV1(h);
   }
@@ -764,6 +1273,8 @@ private:
   bool     m_vcEnabled{false};
   uint32_t m_expected{0};
   uint32_t m_view{0}, m_requestedView{0}, m_viewsEntered{0}, m_maxViews{64};
+  Time m_requestedAt;
+  uint32_t m_escalations{0};
   Time     m_viewTimeout, m_baseViewTimeout;
   double   m_viewBackoff{2.0};
   uint32_t m_vcSize{0}, m_nvSize{0};
@@ -786,6 +1297,22 @@ private:
   uint32_t m_committed{0}, m_msgsSent{0};
   int64_t  m_latSum{0}, m_latMax{0};
   std::vector<int64_t> m_latSamples;
+
+  // HotStuff and Raft
+  Proto    m_proto{PROTO_PBFT};
+  int64_t  m_startNs{0};
+  std::map<uint32_t, HsBlock> m_hsBlocks;
+  uint32_t m_hsView{1}, m_hsHighQC{0}, m_hsLastVoted{0}, m_hsProposed{0};
+  std::map<uint32_t, std::map<uint32_t, std::set<uint32_t>>> m_hsVotes;
+  std::map<uint32_t, std::set<uint32_t>> m_hsNewViews;
+  EventId  m_hsTimer;
+  RfRole   m_rfRole{RF_FOLLOWER};
+  uint32_t m_rfTerm{1}, m_rfVotedTerm{0}, m_rfLeader{0};
+  uint32_t m_rfLast{0}, m_rfCommit{0}, m_rfApplied{0}, m_rfCatchup{0};
+  std::vector<uint32_t> m_rfNext, m_rfMatch;
+  std::set<uint32_t> m_rfVotes;
+  EventId  m_rfElection;
+  Ptr<UniformRandomVariable> m_rfRng;
 
   TracedCallback<Time> m_commitTrace;
 };
@@ -942,6 +1469,8 @@ int main(int argc, char* argv[])
   std::string latencyCsv = "";
   std::string consensusCsv = "";
   std::string pbftModel = "v1";
+  std::string protocol = "pbft";
+  uint32_t raftCatchup = 0;
   bool     viewChange = true;
   Time     viewTimeout = Seconds(-1);   // negative: 4 x consensusInterval
   double   viewBackoff = 2.0;
@@ -950,6 +1479,7 @@ int main(int argc, char* argv[])
   uint32_t viewChangeSize = 0;          // 0: consensusMsgSize
   uint32_t newViewSize = 0;             // 0: consensusMsgSize
   bool     pbftStats = false;
+  bool     queueStats = false;
   std::string attackSpec = "none";
   uint32_t nByzantine = 0;
   std::string byzSelect = "primary";
@@ -1093,6 +1623,16 @@ int main(int argc, char* argv[])
                "v1 = release 1.x normal case, reproduced exactly (static primary, no view "
                "change); full = per-digest quorums, own COMMIT counted, view change",
                pbftModel);
+  cmd.AddValue("protocol",
+               "pbft (see --pbftModel) | hotstuff (chained, rotating leader, votes to the "
+               "next leader) | raft (crash faults only, fixed leader, elections). hotstuff "
+               "and raft use the full model's round clock, timeouts and oracle; "
+               "--viewTimeout is HotStuff's pacemaker timeout and Raft's election timeout",
+               protocol);
+  cmd.AddValue("raftCatchup",
+               "raft: entries per follower per tick, as etcd's flow control; a follower "
+               "that fell behind is caught up over several ticks. 0 = all at once",
+               raftCatchup);
   cmd.AddValue("viewChange", "full model: enable the view change", viewChange);
   cmd.AddValue("viewTimeout",
                "full model: time from a round's start until a backup that has not committed "
@@ -1110,6 +1650,9 @@ int main(int argc, char* argv[])
   cmd.AddValue("newViewSize", "full model: NEW-VIEW size in bytes (0 = consensusMsgSize)",
                newViewSize);
   cmd.AddValue("pbftStats", "print the pbft model section in the v1 model too", pbftStats);
+  cmd.AddValue("queueStats",
+               "print consensus-queue peaks and drops per class (always on with "
+               "--pbftModel=full or an attack; TAS only)", queueStats);
   cmd.AddValue("attack",
                "Comma-separated behaviours: none | crash | withhold | equivocate | flood | "
                "delay | mismark | inject. Validator behaviours need --pbftModel=full. "
@@ -1287,7 +1830,13 @@ int main(int argc, char* argv[])
   Time beSlice   = NanoSeconds(beWindow.GetNanoSeconds() / consSlices);
   CheckWindowFeasibility("control (class 6)", rate, ctrlPayload, ctrlWindow);
   NS_ABORT_MSG_IF(pbftModel != "v1" && pbftModel != "full", "--pbftModel must be v1 or full");
-  const bool fullModel = (pbftModel == "full");
+  NS_ABORT_MSG_IF(protocol != "pbft" && protocol != "hotstuff" && protocol != "raft",
+                  "--protocol must be pbft, hotstuff or raft");
+  NS_ABORT_MSG_IF(protocol == "raft" && (advBits & ADV_EQUIVOCATE),
+                  "Raft tolerates crash faults only: --attack=equivocate does not apply");
+  // HotStuff and Raft run on the full model's machinery.
+  const bool fullModel = (pbftModel == "full") || protocol != "pbft";
+  const std::string modelName = protocol == "pbft" ? pbftModel : protocol;
   if (viewTimeout < Time(0)) viewTimeout = consensusInterval * 4;
   NS_ABORT_MSG_IF(viewBackoff < 1.0, "--viewBackoff must be at least 1.0");
   NS_ABORT_MSG_IF((viewChangeSize && viewChangeSize < 32) || (newViewSize && newViewSize < 32),
@@ -1585,6 +2134,12 @@ int main(int argc, char* argv[])
           app->SetFullModel(viewChange, viewTimeout, viewBackoff, maxViewChanges,
                             viewChangeSize, newViewSize);
           app->SetReproposeWindow(reproposeWindow);
+          if (protocol == "hotstuff") app->SetProtocol(ConsensusApp::PROTO_HOTSTUFF);
+          if (protocol == "raft")
+            {
+              app->SetProtocol(ConsensusApp::PROTO_RAFT);
+              app->SetRaftCatchup(raftCatchup);
+            }
           app->SetOracle(oracle);
           if (byzantine.count(i))
             app->SetAdversary(advBits & ~ADV_INJECT, attackStart, attackStop, floodFactor,
@@ -1622,6 +2177,29 @@ int main(int argc, char* argv[])
   // --- Measurement --------------------------------------------------------
   FlowMonitorHelper fmh;
   Ptr<FlowMonitor> monitor = fmh.InstallAll();
+
+  // --- Queue watch (TAS): peak consensus backlog per port, drops per class ---
+  // Off for the default v1 runs, so their logs are unchanged. The class queue
+  // discs exist only once the nodes are initialised at time 0, hence the event.
+  const bool showQueues = shaper == "tas" && (queueStats || fullModel || advBits != ADV_NONE);
+  std::vector<Ptr<QueuePeak>> qpeaks;
+  if (showQueues)
+    {
+      for (const auto& p : ports)
+        {
+          Ptr<QueuePeak> w = Create<QueuePeak>();
+          w->port = p.role;
+          qpeaks.push_back(w);
+          Ptr<NetDevice> dev = p.dev;
+          Simulator::Schedule(NanoSeconds(1), [w, dev]() {
+            Ptr<TrafficControlLayer> tc = dev->GetNode()->GetObject<TrafficControlLayer>();
+            w->root = tc->GetRootQueueDiscOnDevice(dev);
+            if (w->root && w->root->GetNQueueDiscClasses() > CLASS_CONSENSUS)
+              w->root->GetQueueDiscClass(CLASS_CONSENSUS)->GetQueueDisc()->TraceConnectWithoutContext(
+                  "PacketsInQueue", MakeCallback(&QueuePeak::Track, w));
+          });
+        }
+    }
 
   Simulator::Stop(stopAt);
   Simulator::Run();
@@ -1732,12 +2310,19 @@ int main(int argc, char* argv[])
 
   uint32_t rounds = consensusApps.empty() ? 0 : consensusApps[0]->GetRoundsOpened();
   uint32_t n = nValidators;
-  uint32_t expectedPerRound = (n - 1) + (n - 1) * (n - 1) + n * (n - 1);
+  // Normal case per round: PBFT 3 phases; HotStuff a proposal to all and a vote
+  // from each replica to the next leader; Raft an AppendEntries to each follower
+  // and an acknowledgement back.
+  uint32_t expectedPerRound = protocol == "pbft" ? (n - 1) + (n - 1) * (n - 1) + n * (n - 1)
+                                                 : 2 * (n - 1);
 
   std::cout << "\n=== consensus (class " << CLASS_CONSENSUS << ", n=" << n << ") ===\n"
             << "  rounds started      " << rounds << "\n"
-            << "  broadcasts  pre-prepare " << pp
-            << "  prepare " << pr << "  commit " << cm << "\n"
+            << (protocol == "pbft" ? "  broadcasts  pre-prepare " : protocol == "hotstuff"
+                                                                ? "  sends       proposal (broadcast) "
+                                                                : "  sends       append-entries ")
+            << pp << (protocol == "pbft" ? "  prepare " : protocol == "hotstuff" ? "  vote " : "  ack/vote ")
+            << pr << (protocol == "pbft" ? "  commit " : "  - ") << cm << "\n"
             << "  messages sent       " << msgs << "\n"
             << "  msgs/round actual   "
             << (rounds ? double(msgs) / rounds : 0) << "\n"
@@ -1753,19 +2338,31 @@ int main(int argc, char* argv[])
 
   if (fullModel || pbftStats)
     {
-      uint32_t vcs = 0, nvs = 0, over = 0, entered = 0, viewMax = 0, aband = 0;
+      uint32_t vcs = 0, nvs = 0, over = 0, entered = 0, viewMax = 0, aband = 0, esc = 0, capped = 0;
       for (auto& a : consensusApps)
         {
           vcs += a->GetSentViewChange();
           nvs += a->GetSentNewView();
           over += a->GetOvertaken();
           aband += a->GetAbandoned();
+          esc += a->GetEscalations();
+          capped += a->AtViewCap() ? 1 : 0;
           entered += a->GetViewsEntered();
           viewMax = std::max(viewMax, a->GetView());
         }
-      std::cout << "\n=== pbft model ===\n"
-                << "  model               " << pbftModel;
-      if (fullModel)
+      std::cout << (protocol == "pbft" ? "\n=== pbft model ===\n" : "\n=== protocol ===\n")
+                << "  model               " << modelName;
+      if (protocol == "hotstuff")
+        std::cout << "  (pacemaker timeout " << viewTimeout.GetMicroSeconds() << " us, backoff "
+                  << viewBackoff << "; view-change below = NEW-VIEW sends, new-view = "
+                  << "proposals made on NEW-VIEWs)";
+      else if (protocol == "raft")
+        std::cout << "  (election timeout " << viewTimeout.GetMicroSeconds() << "-"
+                  << 2 * viewTimeout.GetMicroSeconds() << " us, catch-up "
+                  << (raftCatchup ? std::to_string(raftCatchup) + " entries/tick" : std::string("unlimited"))
+                  << "; view-change below = elections started, new-view = elections won, "
+                  << "views = terms)";
+      else if (fullModel)
         std::cout << "  (view change " << (viewChange ? "on" : "off")
                   << ", timeout " << viewTimeout.GetMicroSeconds() << " us, backoff "
                   << viewBackoff << ", VIEW-CHANGE "
@@ -1776,48 +2373,48 @@ int main(int argc, char* argv[])
                 << "  views entered       " << entered << "  (highest view " << viewMax << ")\n"
                 << "  prepares before pre-prepare  " << over
                 << "  node-rounds with PREPAREs from 2f senders before the PRE-PREPARE\n";
-      // Printed only when set, so default full-model logs are unchanged.
+      // Printed only when non-zero or set, so logs without them are unchanged.
+      if (esc > 0)
+        std::cout << "  escalations         " << esc
+                  << "  (VIEW-CHANGE re-sent for a later view: no NEW-VIEW in time)\n";
+      if (capped > 0)
+        std::cout << "  view cap reached    " << capped << " of " << n
+                  << " nodes  (--maxViewChanges " << maxViewChanges
+                  << "; they stopped changing view)\n";
       if (fullModel && reproposeWindow > 0)
         std::cout << "  re-propose window   " << reproposeWindow << " rounds  ("
                   << aband << " node-rounds abandoned at view changes)\n";
     }
 
-  if (advBits != ADV_NONE)
+  if (showQueues)
     {
-      uint32_t mis = 0, fl = 0, eq = 0, cu = 0;
-      for (auto& a : consensusApps)
+      uint32_t peak = 0;
+      std::string peakPort = "-";
+      uint64_t drops[3] = {0, 0, 0};   // control, consensus, best effort
+      const uint32_t cls[3] = {CLASS_CONTROL, CLASS_CONSENSUS, CLASS_BE};
+      for (auto& w : qpeaks)
         {
-          mis += a->GetMismarked();
-          fl += a->GetFloodExtra();
-          eq += a->GetEquivocations();
-          cu += a->GetCaughtUp();
+          if (w->peak > peak) { peak = w->peak; peakPort = w->port; }
+          if (!w->root) continue;
+          for (int k = 0; k < 3; ++k)
+            if (w->root->GetNQueueDiscClasses() > cls[k])
+              drops[k] += w->root->GetQueueDiscClass(cls[k])->GetQueueDisc()->GetStats()
+                              .nTotalDroppedPackets;
         }
-      std::ostringstream who;
-      for (uint32_t b : byzantine) who << (who.tellp() ? "," : "") << b;
-      std::cout << "\n=== adversary ===\n"
-                << "  attack              " << AttackName(advBits) << "\n"
-                << "  byzantine           " << byzantine.size() << " of " << n << " (f = "
-                << (n ? (n - 1) / 3 : 0) << ")  select " << byzSelect << "  ids "
-                << (byzantine.empty() ? "-" : who.str()) << "\n"
-                << "  window              [" << attackStart.GetSeconds() << " s, "
-                << attackStop.GetSeconds() << " s)\n"
-                << "  mismarked frames    " << mis << "\n"
-                << "  flood extra frames  " << fl << "  (factor " << floodFactor << ")\n"
-                << "  equivocations       " << eq << "\n"
-                << "  caught up to a view " << cu << "\n";
-      if (nInjectors > 0)
-        {
-          uint64_t sent = 0;
-          for (auto& a : injApps) sent += a->GetFramesSent();
-          std::cout << "  injectors           " << nInjectors << "  class " << injectClass
-                    << "  " << injectFrame << " B x " << injectBurst << " every "
-                    << injectInterval.GetMicroSeconds() << " us\n"
-                    << "  injected frames     sent " << sent << "  arrived "
-                    << injSink->GetFrames() << "\n";
-        }
+      std::cout << "\n=== queues ===\n"
+                << "  consensus peak      " << peak << " frames  (port " << peakPort
+                << "; the class queue holds 800)\n"
+                << "  drops               control " << drops[0] << "  consensus " << drops[1]
+                << "  be " << drops[2] << "\n";
+    }
+
+  // Agreement figures from the oracle: in the adversary section under an attack,
+  // in their own section in a full-model run without one.
+  auto printAgreement = [&]() {
       if (oracle)
         {
-          uint32_t q = 2 * ((n - 1) / 3) + 1;
+          // Quorum: 2f+1 of n = 3f+1 for the Byzantine protocols, a majority for Raft.
+          uint32_t q = protocol == "raft" ? n / 2 + 1 : 2 * ((n - 1) / 3) + 1;
           std::cout << "  rounds opened       " << oracle->RoundsOpened() << "\n"
                     << "  rounds with commit  " << oracle->RoundsWithAnyCommit()
                     << "  (any trusted node)\n"
@@ -1837,6 +2434,42 @@ int main(int argc, char* argv[])
               oracle->DumpCsv(f, q);
             }
         }
+  };
+
+  if (advBits != ADV_NONE)
+    {
+      uint32_t mis = 0, fl = 0, eq = 0, cu = 0;
+      for (auto& a : consensusApps)
+        {
+          mis += a->GetMismarked();
+          fl += a->GetFloodExtra();
+          eq += a->GetEquivocations();
+          cu += a->GetCaughtUp();
+        }
+      std::ostringstream who;
+      for (uint32_t b : byzantine) who << (who.tellp() ? "," : "") << b;
+      std::cout << "\n=== adversary ===\n"
+                << "  attack              " << AttackName(advBits) << "\n"
+                << "  byzantine           " << byzantine.size() << " of " << n << " (f = "
+                << (n ? (protocol == "raft" ? (n - 1) / 2 : (n - 1) / 3) : 0) << ")  select " << byzSelect << "  ids "
+                << (byzantine.empty() ? "-" : who.str()) << "\n"
+                << "  window              [" << attackStart.GetSeconds() << " s, "
+                << attackStop.GetSeconds() << " s)\n"
+                << "  mismarked frames    " << mis << "\n"
+                << "  flood extra frames  " << fl << "  (factor " << floodFactor << ")\n"
+                << "  equivocations       " << eq << "\n"
+                << "  caught up to a view " << cu << "\n";
+      if (nInjectors > 0)
+        {
+          uint64_t sent = 0;
+          for (auto& a : injApps) sent += a->GetFramesSent();
+          std::cout << "  injectors           " << nInjectors << "  class " << injectClass
+                    << "  " << injectFrame << " B x " << injectBurst << " every "
+                    << injectInterval.GetMicroSeconds() << " us\n"
+                    << "  injected frames     sent " << sent << "  arrived "
+                    << injSink->GetFrames() << "\n";
+        }
+      printAgreement();
       const auto& d = sinkApp->GetDuring();
       const auto& o = sinkApp->GetOutside();
       std::cout << "  control during      received " << d.received << "  missed " << d.missed
@@ -1845,6 +2478,11 @@ int main(int argc, char* argv[])
                 << "  control outside     received " << o.received << "  missed " << o.missed
                 << "  p99 " << ControlSinkApp::PercentileUsOf(o, 0.99) << " us  max "
                 << o.maxNs / 1000.0 << " us\n";
+    }
+  if (advBits == ADV_NONE && oracle)
+    {
+      std::cout << "\n=== agreement ===\n";
+      printAgreement();
     }
 
   taps.Report(std::cout);
