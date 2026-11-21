@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this software, please cite the release you used, as below."
 type: software
 title: "iiot-tsn-consensus: PBFT, HotStuff and Raft under faults on IEEE 802.11Qbv industrial networks"
-version: 2.0.0
+version: 2.0.1
 date-released: 2026-11-21
 license: MIT
 doi: 10.5281/zenodo.24384364
@@ -29,4 +29,6 @@ keywords:
   - consensus
   - industrial IoT
 abstract: >-
-Industrial networks that carry a control loop under IEEE 802.1Qbv time-aware shaping can also carry a consensus protocol’s traffic in a gated class of its own, but a schedule that admits the protocol’s normal-case traffic need not survive a fault. We study this with packet-level ns-3 simulation of PBFT with view changes and Byzantine behaviours, chained HotStuff and Raft, sharing a five-hop path with a 1 ms control loop, over 333 configurations. Configurations that pass a per-round frame-counting rule on the busiest link still fail after a single 1.5 s fault: when PBFT’s new primary re-proposes every held round, a crashed primary leaves 9% spare capacity insufficient, and the view-change storm continues after the node is back, with 5–18% of rounds reaching a quorum. Recovery needs about 25% (crash) and 40% (equivocation) spare capacity, independent of committee size from 7 to 16; bounding re-proposal to one or two rounds, with a view timeout of at least four rounds, removes the need for headroom. HotStuff and Raft need an eighth of PBFT’s window but fail the same way: HotStuff below about 25% spare over its worst round, Raft whenever catch-up is not flow-controlled. A recovery-burst rule with one fitted parameter accounts for 197 of 218 development configurations and, on 40 configurations registered before the runs, predicts 16 of 17 PBFT outcomes. The control loop never missed a deadline and no safety violation occurred.
+  Simulation code and reference results for the paper “Recovery bursts decide: PBFT, HotStuff and Raft under faults on IEEE 802.1Qbv industrial networks” (Nugroho and Sari).
+  The repository holds an ns-3 simulation of a 1 ms industrial control loop sharing a time-aware shaped (IEEE 802.1Qbv) network with consensus traffic. It includes PBFT with view changes and Byzantine behaviours, chained HotStuff and Raft. Across 329 configurations, schedules that pass a per-round frame-counting rule still fail after a single fault: a recovery burst can set off a storm of view changes that lasts after the fault ends. Recovery needs about 25% spare capacity after a crash and 40% after equivocation, unless re-proposal or catch-up is bounded. A one-parameter recovery-burst rule accounts for 194 of 214 development configurations and predicted 16 of 17 PBFT outcomes registered before the runs. The control loop never missed a deadline, and no run violated safety.
+  Built on ns-3.49 with the DenKrysos TAS module at commit 3d00954. tools/verify_paper2.sh rebuilds the stack, reruns every experiment and checks the results against tools/reference/paper2/. Version 1.x holds the code of the first paper, whose runs still reproduce in this version.
