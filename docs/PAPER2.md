@@ -104,6 +104,27 @@ writes `all_cells.csv`, the tables (CSV and booktabs LaTeX) and the figures (PDF
 and PNG). Generated tables and figures belong with the paper, not in the
 repository (`.gitignore` excludes `results_*/`).
 
+## Reproducing the second paper
+
+`tools/verify_paper2.sh` rebuilds the stack from scratch (ns-3.49, TAS module at
+commit `3d00954`), runs both scenario checks (`adversary_check.sh`, 30 checks;
+`protocol_check.sh`, 29), the full sweep of 333 cells, `assemble_results.py`, and
+compares the result with `tools/reference/paper2/`:
+
+    tools/verify_paper2.sh -j 4              # all 333 cells, about 7 h on one core
+    tools/verify_paper2.sh --quick           # f1, p1 and v1 only (89 cells, cells only)
+    tools/verify_paper2.sh --check-only      # assemble and compare an earlier run again
+
+Before building it checks that `tools/validation/v1_cells.csv` still has its
+registered hash and that `fault_sweep.sh` lists exactly the reference cells.
+`tools/compare_paper2.py` reports three levels: control isolation and safety in
+every cell (from the new run alone), each cell's outcome and rule prediction, and
+every value of every cell plus every table of the paper. The model is
+deterministic, so a matching build reproduces all three exactly. The work folder
+(default `paper2-work` beside the repository) keeps the sweep, the tables and the
+figures; `paper2-repro-results.tar.gz` there packs the logs, summary, tables,
+comparison and environment record for sharing. Exit status 0 means reproduced.
+
 ## Notes on reading the results
 
 - A configuration that breaks C5 by e frames per round fails only after about

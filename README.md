@@ -48,6 +48,7 @@ means the build or the tree differs from the one the results came from.
 scratch/   iiot-consensus-tsn.cc  control-loop-app.h  pcap-tap.h  adversary.h   -> ns-3 scratch/
 tools/     sweep.sh  frontier.py  uncertainty.py  iiot-tsn-dissector.lua
            verify_reproducibility.sh  compare_reference.py  reference/     rebuild, rerun and check
+           verify_paper2.sh  compare_paper2.py  reference/paper2/    the same for the second paper
            round_check.sh  round_check.py                            do consensus rounds overlap?
            adversary_check.sh                                        full PBFT model and Byzantine behaviours
 docs/      CAPTURES.md                                              packet captures and the dissector
@@ -138,6 +139,9 @@ It also packs `repro-results.tar.gz` (under 10 MB) with the summaries, logs, cap
 and a record of the environment, for sharing a run. `tools/compare_reference.py check <results> tools/reference`
 compares any results folder laid out the same way. `--tas-src`, `--tas-commit`, `--ns3-tag` and `--profile` change the
 build; with a different version, expect differences to show up in the comparison.
+
+The second paper has its own script, `tools/verify_paper2.sh` (333 fault cells, about 7 h on one core, `-j N` to run
+in parallel; `--quick` for f1, p1 and v1), checked against `tools/reference/paper2/`; see `docs/PAPER2.md`.
 
 ## Rules the experiments support
 

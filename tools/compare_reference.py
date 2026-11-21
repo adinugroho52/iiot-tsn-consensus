@@ -137,7 +137,12 @@ def main(argv):
     mode, results, reference, sets = argv[0], argv[1], argv[2], argv[3:]
     if not sets:
         base = reference if mode == 'check' else results
-        sets = sorted(d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d)))
+        # A first-paper set is a folder with a sha256.txt (in the reference) or a
+        # summary.csv or log/ (in results); tools/reference/paper2 is neither.
+        sets = sorted(d for d in os.listdir(base)
+                      if os.path.isdir(os.path.join(base, d))
+                      and any(os.path.exists(os.path.join(base, d, f))
+                              for f in ('sha256.txt', 'summary.csv', 'log')))
     return (check if mode == 'check' else make)(results, reference, sets)
 
 

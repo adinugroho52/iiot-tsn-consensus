@@ -1,0 +1,334 @@
+cell,set,protocol,config,attack,timeout_rounds,window,n,T_ms,C,M,spare,spare_share,outcome,failed,vc_node,quorum_done,rounds_opened,abandoned,cons_peak,cons_drops,commit_p50_us,commit_p99_us,ctrl_missed,ctrl_p99_us,safety,rule_prediction,rule_margin,rule_reason
+f1-w300t6-crash-to2-w0,f1,pbft,w300t6,crash,2,0,16,6.0,210,128,82,0.641,recovered,0,1.0,966,966,0,146,0,3486.32,4486.22,0,4.26,0,ok,0.986,recovers: wait 11.8 < timeout 12.0 ms (B 320)
+f1-w300t6-crash-to4-w0,f1,pbft,w300t6,crash,4,0,16,6.0,210,128,82,0.641,recovered,0,1.0,966,966,0,253,0,3486.32,5494.76,0,4.26,0,ok,0.767,recovers: wait 18.4 < timeout 24.0 ms (B 576)
+f1-w300t6-crash-to2-w2,f1,pbft,w300t6,crash,2,2,16,6.0,210,128,82,0.641,recovered,0,1.0,965,965,0,86,0,3486.32,4486.22,0,4.26,0,ok,0.986,recovers: wait 11.8 < timeout 12.0 ms (B 320)
+f1-w300t6-crash-to2-w1,f1,pbft,w300t6,crash,2,1,16,6.0,210,128,82,0.641,recovered,0,1.0,964,964,0,42,0,3486.32,4486.22,0,4.26,0,ok,0.711,recovers: wait 8.5 < timeout 12.0 ms (B 192)
+f1-w300t6-crash-to4-w1,f1,pbft,w300t6,crash,4,1,16,6.0,210,128,82,0.641,recovered,0,1.0,962,962,0,42,0,3486.32,4486.22,0,4.26,0,ok,0.356,recovers: wait 8.5 < timeout 24.0 ms (B 192)
+f1-w300t6-crash-to4-w2,f1,pbft,w300t6,crash,4,2,16,6.0,210,128,82,0.641,recovered,0,1.0,963,963,0,86,0,3486.32,4486.22,0,4.26,0,ok,0.493,recovers: wait 11.8 < timeout 24.0 ms (B 320)
+f1-w300t6-crash-to8-w2,f1,pbft,w300t6,crash,8,2,16,6.0,210,128,82,0.641,recovered,0,1.0,959,959,0,86,0,3486.32,4486.22,0,4.26,0,ok,0.246,recovers: wait 11.8 < timeout 48.0 ms (B 320)
+f1-w300t6-crash-to8-w0,f1,pbft,w300t6,crash,8,0,16,6.0,210,128,82,0.641,recovered,0,1.0,966,966,0,450,0,3486.32,30477.9,0,4.26,0,ok,0.658,recovers: wait 31.6 < timeout 48.0 ms (B 1088)
+f1-w300t6-crash-to8-w1,f1,pbft,w300t6,crash,8,1,16,6.0,210,128,82,0.641,recovered,0,1.0,958,958,0,42,0,3486.32,4486.22,0,4.26,0,ok,0.178,recovers: wait 8.5 < timeout 48.0 ms (B 192)
+f1-w300t4-crash-to2-w2,f1,pbft,w300t4,crash,2,2,16,4.0,140,128,12,0.094,recovered,0,1.0,1448,1448,0,157,0,3511.62,4486.22,0,4.26,0,ok,1.482,bounded and drained at 12 frames/round
+f1-w300t4-crash-to2-w1,f1,pbft,w300t4,crash,2,1,16,4.0,140,128,12,0.094,recovered,0,1.0,1447,1447,0,58,0,3511.62,4486.22,0,4.26,0,ok,1.071,bounded and drained at 12 frames/round
+f1-w300t4-crash-to2-w0,f1,pbft,w300t4,crash,2,0,16,4.0,140,128,12,0.094,storm,1,91.2,282,1449,0,800,241637,3553.78,252689,0,4.26,0,fail,1.482,unbounded recovery re-triggers: wait 11.9 >= 8.0 ms (B 320)
+f1-w300t4-crash-to4-w0,f1,pbft,w300t4,crash,4,0,16,4.0,140,128,12,0.094,storm,1,71.9,308,1447,0,800,226708,3630.42,253629,0,4.26,0,fail,1.153,unbounded recovery re-triggers: wait 18.4 >= 16.0 ms (B 576)
+f1-w300t4-crash-to4-w2,f1,pbft,w300t4,crash,4,2,16,4.0,140,128,12,0.094,recovered,0,1.0,1446,1446,0,157,0,3511.62,4486.22,0,4.26,0,ok,0.741,recovers: wait 11.9 < timeout 16.0 ms (B 320)
+f1-w300t4-crash-to4-w1,f1,pbft,w300t4,crash,4,1,16,4.0,140,128,12,0.094,recovered,0,1.0,1445,1445,0,58,0,3511.62,4486.22,0,4.26,0,ok,0.535,recovers: wait 8.6 < timeout 16.0 ms (B 192)
+f1-w300t4-crash-to8-w0,f1,pbft,w300t4,crash,8,0,16,4.0,140,128,12,0.094,storm,1,53.9,451,1449,0,800,187524,65444.2,252426,0,4.26,0,ok,0.988,recovers: wait 31.6 < timeout 32.0 ms (B 1088)
+f1-w300t4-crash-to8-w2,f1,pbft,w300t4,crash,8,2,16,4.0,140,128,12,0.094,recovered,0,1.0,1442,1442,0,157,0,3511.62,4486.22,0,4.26,0,ok,0.371,recovers: wait 11.9 < timeout 32.0 ms (B 320)
+f1-w300t4-crash-to8-w1,f1,pbft,w300t4,crash,8,1,16,4.0,140,128,12,0.094,recovered,0,1.0,1441,1441,0,58,0,3511.62,4486.22,0,4.26,0,ok,0.268,recovers: wait 8.6 < timeout 32.0 ms (B 192)
+f1-w275t4-crash-to2-w0,f1,pbft,w275t4,crash,2,0,16,4.0,128,128,0,0.000,storm,1,84.8,279,1449,0,800,229933,3604.37,247596,0,4.26,0,fail,1.677,unbounded recovery re-triggers: wait 13.4 >= 8.0 ms (B 320)
+f1-w275t4-crash-to2-w2,f1,pbft,w275t4,crash,2,2,16,4.0,128,128,0,0.000,storm,1,201.9,573,1410,833,800,223,17486.2,34410.2,0,4.26,0,fail,1.677,"bounded, but no spare capacity to drain it (S = 0)"
+f1-w275t4-crash-to2-w1,f1,pbft,w275t4,crash,2,1,16,4.0,128,128,0,0.000,recovered+delay,0,1.0,1446,1447,0,92,0,5477.89,6587.51,0,4.26,0,fail,1.228,"bounded, but no spare capacity to drain it (S = 0)"
+f1-w275t4-crash-to4-w0,f1,pbft,w275t4,crash,4,0,16,4.0,128,128,0,0.000,storm,1,65.8,314,1449,0,800,215857,4419.62,252502,0,4.26,0,fail,1.289,unbounded recovery re-triggers: wait 20.6 >= 16.0 ms (B 576)
+f1-w275t4-crash-to4-w2,f1,pbft,w275t4,crash,4,2,16,4.0,128,128,0,0.000,recovered+delay,0,1.0,1444,1446,0,220,0,9469.46,10570.5,0,4.26,0,ok,0.839,recovers: wait 13.4 < timeout 16.0 ms (B 320)
+f1-w275t4-crash-to4-w1,f1,pbft,w275t4,crash,4,1,16,4.0,128,128,0,0.000,recovered+delay,0,1.0,1444,1445,0,92,0,5477.89,6587.51,0,4.26,0,ok,0.614,recovers: wait 9.8 < timeout 16.0 ms (B 192)
+f1-100mt8-crash-to2-w0,f1,pbft,100mt8,crash,2,0,10,8.0,56,50,6,0.120,storm,1,30.2,142,724,0,800,15684,7499.66,428661,0,68.58,0,fail,1.481,unbounded recovery re-triggers: wait 23.7 >= 16.0 ms (B 125)
+f1-w275t4-crash-to8-w0,f1,pbft,w275t4,crash,8,0,16,4.0,128,128,0,0.000,storm,1,48.4,376,1449,0,800,193367,43620.3,245554,0,4.26,0,fail,1.094,unbounded recovery re-triggers: wait 35.0 >= 32.0 ms (B 1088)
+f1-w275t4-crash-to8-w2,f1,pbft,w275t4,crash,8,2,16,4.0,128,128,0,0.000,recovered+delay,0,1.0,1440,1442,0,220,0,9469.46,10570.5,0,4.26,0,ok,0.419,recovers: wait 13.4 < timeout 32.0 ms (B 320)
+f1-100mt8-crash-to2-w2,f1,pbft,100mt8,crash,2,2,10,8.0,56,50,6,0.120,storm,1,114.6,378,715,334,430,0,29921.5,75020.9,0,68.58,0,ok,1.481,bounded and drained at 6 frames/round
+f1-w275t4-crash-to8-w1,f1,pbft,w275t4,crash,8,1,16,4.0,128,128,0,0.000,recovered+delay,0,1.0,1440,1441,0,92,0,5477.89,6587.51,0,4.26,0,ok,0.307,recovers: wait 9.8 < timeout 32.0 ms (B 192)
+f1-100mt8-crash-to2-w1,f1,pbft,100mt8,crash,2,1,10,8.0,56,50,6,0.120,recovered,0,1.0,722,722,0,18,0,6936.6,8584.08,0,68.58,0,ok,1.079,bounded and drained at 6 frames/round
+f1-100mt8-crash-to4-w0,f1,pbft,100mt8,crash,4,0,10,8.0,56,50,6,0.120,storm,1,27.8,160,724,0,800,8496,47691.3,502852,0,68.58,0,fail,1.142,unbounded recovery re-triggers: wait 36.5 >= 32.0 ms (B 225)
+f1-100mt8-crash-to4-w2,f1,pbft,100mt8,crash,4,2,10,8.0,56,50,6,0.120,recovered,0,1.0,721,721,0,39,0,6936.6,12683.6,0,68.58,0,ok,0.740,recovers: wait 23.7 < timeout 32.0 ms (B 125)
+f1-100mt8-crash-to4-w1,f1,pbft,100mt8,crash,4,1,10,8.0,56,50,6,0.120,recovered,0,1.0,720,720,0,18,0,6936.6,8584.08,0,68.58,0,ok,0.539,recovers: wait 17.3 < timeout 32.0 ms (B 75)
+f1-100mt8-crash-to8-w0,f1,pbft,100mt8,crash,8,0,10,8.0,56,50,6,0.120,storm,1,19.2,193,724,0,800,9108,82683.5,504776,0,68.58,0,ok,0.973,recovers: wait 62.3 < timeout 64.0 ms (B 425)
+f1-100mt8-crash-to8-w2,f1,pbft,100mt8,crash,8,2,10,8.0,56,50,6,0.120,recovered,0,1.0,717,717,0,39,0,6936.6,12691.4,0,68.58,0,ok,0.370,recovers: wait 23.7 < timeout 64.0 ms (B 125)
+f1-100mt8-crash-to8-w1,f1,pbft,100mt8,crash,8,1,10,8.0,56,50,6,0.120,recovered,0,1.0,716,716,0,18,0,6936.6,8584.08,0,68.58,0,ok,0.270,recovers: wait 17.3 < timeout 64.0 ms (B 75)
+f2-w300t6-none-to1-w0,f2,pbft,w300t6,none,1,0,16,6.0,210,128,82,0.641,recovered,0,0.0,966,966,0,42,0,3435.73,3596.69,0,4.26,0,ok,,no trigger: L0 3.6 < timeout 6.0 ms
+f2-w300t6-none-to1-w2,f2,pbft,w300t6,none,1,2,16,6.0,210,128,82,0.641,recovered,0,0.0,966,966,0,42,0,3435.73,3596.69,0,4.26,0,ok,,no trigger: L0 3.6 < timeout 6.0 ms
+f2-w300t6-none-to0.5-w2,f2,pbft,w300t6,none,0.5,2,16,6.0,210,128,82,0.641,churn,0,483.0,966,966,0,64,0,3502.24,4418.77,0,4.26,0,ok,2.914,bounded and drained at 82 frames/round
+f2-w300t6-none-to0.5-w0,f2,pbft,w300t6,none,0.5,0,16,6.0,210,128,82,0.641,churn,0,483.0,966,966,0,64,0,3502.24,4418.77,0,4.26,0,fail,2.914,unbounded recovery re-triggers: wait 8.7 >= 3.0 ms (B 200)
+f2-w300t6-none-to2-w0,f2,pbft,w300t6,none,2,0,16,6.0,210,128,82,0.641,recovered,0,0.0,966,966,0,42,0,3435.73,3596.69,0,4.26,0,ok,,no trigger: L0 3.6 < timeout 12.0 ms
+f2-w300t6-none-to2-w2,f2,pbft,w300t6,none,2,2,16,6.0,210,128,82,0.641,recovered,0,0.0,966,966,0,42,0,3435.73,3596.69,0,4.26,0,ok,,no trigger: L0 3.6 < timeout 12.0 ms
+f2-w300t4-none-to0.5-w2,f2,pbft,w300t4,none,0.5,2,16,4.0,140,128,12,0.094,storm,1,409.9,264,1378,1110,800,3038,19671.8,39579,0,4.26,0,ok,4.386,bounded and drained at 12 frames/round
+f2-w300t4-none-to1-w0,f2,pbft,w300t4,none,1,0,16,4.0,140,128,12,0.094,recovered,0,0.0,1449,1449,0,46,0,3486.32,3630.42,0,4.26,0,ok,,no trigger: L0 3.6 < timeout 4.0 ms
+f2-w300t4-none-to0.5-w0,f2,pbft,w300t4,none,0.5,0,16,4.0,140,128,12,0.094,storm,1,184.1,117,1448,0,800,340986,74469.5,252462,0,4.26,0,fail,4.386,unbounded recovery re-triggers: wait 8.8 >= 2.0 ms (B 200)
+f2-w300t4-none-to1-w2,f2,pbft,w300t4,none,1,2,16,4.0,140,128,12,0.094,recovered,0,0.0,1449,1449,0,46,0,3486.32,3630.42,0,4.26,0,ok,,no trigger: L0 3.6 < timeout 4.0 ms
+f2-w300t4-none-to2-w0,f2,pbft,w300t4,none,2,0,16,4.0,140,128,12,0.094,recovered,0,0.0,1449,1449,0,46,0,3486.32,3630.42,0,4.26,0,ok,,no trigger: L0 3.6 < timeout 8.0 ms
+f2-w275t4-none-to0.5-w0,f2,pbft,w275t4,none,0.5,0,16,4.0,128,128,0,0.000,storm,1,92.9,41,705,0,800,174459,85511.5,253664,0,4.26,0,fail,5.022,unbounded recovery re-triggers: wait 10.0 >= 2.0 ms (B 200)
+f2-w300t4-none-to2-w2,f2,pbft,w300t4,none,2,2,16,4.0,140,128,12,0.094,recovered,0,0.0,1449,1449,0,46,0,3486.32,3630.42,0,4.26,0,ok,,no trigger: L0 3.6 < timeout 8.0 ms
+f2-w275t4-none-to0.5-w2,f2,pbft,w275t4,none,0.5,2,16,4.0,128,128,0,0.000,storm,1,381.9,183,1361,1174,800,15300,29528.4,54469.4,0,4.26,0,fail,5.022,"bounded, but no spare capacity to drain it (S = 0)"
+f2-w275t4-none-to1-w2,f2,pbft,w275t4,none,1,2,16,4.0,128,128,0,0.000,storm,1,287.0,232,1371,1133,800,419,24494.7,37588.3,0,4.26,0,fail,2.511,"bounded, but no spare capacity to drain it (S = 0)"
+f2-w275t4-none-to1-w0,f2,pbft,w275t4,none,1,0,16,4.0,128,128,0,0.000,storm,1,133.3,91,1449,0,800,296194,84604.3,253411,0,4.26,0,fail,2.511,unbounded recovery re-triggers: wait 10.0 >= 4.0 ms (B 200)
+f2-100mt8-none-to0.5-w0,f2,pbft,100mt8,none,0.5,0,10,8.0,56,50,6,0.120,storm,1,67.4,38,724,0,800,23710,367937,504706,0,68.58,0,fail,4.476,unbounded recovery re-triggers: wait 17.9 >= 4.0 ms (B 80)
+f2-w275t4-none-to2-w2,f2,pbft,w275t4,none,2,2,16,4.0,128,128,0,0.000,recovered,0,0.0,1449,1449,0,41,0,3536.82,4419.62,0,4.26,0,ok,,no trigger: L0 4.4 < timeout 8.0 ms
+f2-w275t4-none-to2-w0,f2,pbft,w275t4,none,2,0,16,4.0,128,128,0,0.000,recovered,0,0.0,1449,1449,0,41,0,3536.82,4419.62,0,4.26,0,ok,,no trigger: L0 4.4 < timeout 8.0 ms
+f2-100mt8-none-to0.5-w2,f2,pbft,100mt8,none,0.5,2,10,8.0,56,50,6,0.120,storm,1,204.5,135,720,583,449,0,42936.6,86005.8,0,68.58,0,ok,4.476,bounded and drained at 6 frames/round
+f2-100mt8-none-to1-w0,f2,pbft,100mt8,none,1,0,10,8.0,56,50,6,0.120,recovered,0,0.0,724,724,0,11,0,6928.98,7622.18,0,68.58,0,ok,,no trigger: L0 7.6 < timeout 8.0 ms
+f2-100mt8-none-to1-w2,f2,pbft,100mt8,none,1,2,10,8.0,56,50,6,0.120,recovered,0,0.0,724,724,0,11,0,6928.98,7622.18,0,68.58,0,ok,,no trigger: L0 7.6 < timeout 8.0 ms
+f2-100mt8-none-to2-w0,f2,pbft,100mt8,none,2,0,10,8.0,56,50,6,0.120,recovered,0,0.0,724,724,0,11,0,6928.98,7622.18,0,68.58,0,ok,,no trigger: L0 7.6 < timeout 16.0 ms
+f2-100mt8-none-to2-w2,f2,pbft,100mt8,none,2,2,10,8.0,56,50,6,0.120,recovered,0,0.0,724,724,0,11,0,6928.98,7622.18,0,68.58,0,ok,,no trigger: L0 7.6 < timeout 16.0 ms
+f3-w300t6-flood2,f3,pbft,w300t6,flood2,4,0,16,6.0,210,128,82,0.641,recovered,0,0.0,966,966,0,54,0,3477.79,3663.3,0,4.26,0,ok,,"flood within C5, no recovery"
+f3-w300t6-equivocate-w2,f3,pbft,w300t6,equivocate,4,2,16,6.0,210,128,82,0.641,recovered,0,1.0,963,966,3,136,0,3485.37,3596.69,0,4.26,0,ok,0.501,recovers: wait 12.0 < timeout 24.0 ms (B 328)
+f3-w300t6-equivocate-w0,f3,pbft,w300t6,equivocate,4,0,16,6.0,210,128,82,0.641,recovered,0,1.0,966,966,0,295,0,3485.37,9435.73,0,4.26,0,ok,0.776,recovers: wait 18.6 < timeout 24.0 ms (B 584)
+f3-w300t6-flood8,f3,pbft,w300t6,flood8,4,0,16,6.0,210,128,82,0.641,recovered,0,0.0,966,966,0,800,13723,3504.04,4486.22,0,4.26,0,fail,,C5: 264 > 210
+f3-w300t4-equivocate-w2,f3,pbft,w300t4,equivocate,4,2,16,4.0,140,128,12,0.094,recovered,0,1.0,1446,1449,3,163,0,3511.62,5603.42,0,4.26,0,ok,0.754,recovers: wait 12.1 < timeout 16.0 ms (B 328)
+f3-w300t4-flood2,f3,pbft,w300t4,flood2,4,0,16,4.0,140,128,12,0.094,storm,1,63.6,441,1449,0,800,210801,9411.09,253443,0,4.26,0,fail,,C5: 144 > 140
+f3-w300t4-flood8,f3,pbft,w300t4,flood8,4,0,16,4.0,140,128,12,0.094,storm,1,66.8,297,1449,0,800,329634,3630.42,254554,0,4.26,0,fail,,C5: 264 > 140
+f3-w300t4-equivocate-w0,f3,pbft,w300t4,equivocate,4,0,16,4.0,140,128,12,0.094,storm,1,72.0,351,1449,0,800,247086,39436.5,247655,0,4.26,0,fail,1.165,unbounded recovery re-triggers: wait 18.6 >= 16.0 ms (B 584)
+f3-w275t4-flood2,f3,pbft,w275t4,flood2,4,0,16,4.0,128,128,0,0.000,storm,1,64.3,306,1449,0,800,223382,4419.62,252522,0,4.26,0,fail,,C5: 144 > 128
+f3-w275t4-equivocate-w2,f3,pbft,w275t4,equivocate,4,2,16,4.0,128,128,0,0.000,recovered+delay,0,1.0,1443,1449,3,185,0,11503.2,15428.1,0,4.26,0,ok,0.853,recovers: wait 13.6 < timeout 16.0 ms (B 328)
+f3-w275t4-flood8,f3,pbft,w275t4,flood8,4,0,16,4.0,128,128,0,0.000,storm,1,63.6,299,1449,0,800,336651,3646.43,248496,0,4.26,0,fail,,C5: 264 > 128
+f3-w275t4-equivocate-w0,f3,pbft,w275t4,equivocate,4,0,16,4.0,128,128,0,0.000,storm,1,62.8,316,1449,0,800,223643,4419.62,241554,0,4.26,0,fail,1.303,unbounded recovery re-triggers: wait 20.8 >= 16.0 ms (B 584)
+f4-w300t4-crash-to2-w2,f4,pbft,w300t4,crash,2,2,16,4.0,140,128,12,0.094,recovered,0,1.0,1448,1448,0,157,0,3511.62,4486.22,0,4.26,0,ok,1.482,bounded and drained at 12 frames/round
+f4-w300t4-flood2,f4,pbft,w300t4,flood2,4,0,16,4.0,140,128,12,0.094,storm,1,63.6,441,1449,0,800,210801,9411.09,253443,0,4.26,0,fail,,C5: 144 > 140
+f4-w300t4-crash-to4-w0,f4,pbft,w300t4,crash,4,0,16,4.0,140,128,12,0.094,storm,1,71.9,308,1447,0,800,226708,3630.42,253629,0,4.26,0,fail,1.153,unbounded recovery re-triggers: wait 18.4 >= 16.0 ms (B 576)
+f4-w300t4-equivocate-w0,f4,pbft,w300t4,equivocate,4,0,16,4.0,140,128,12,0.094,storm,1,72.0,351,1449,0,800,247086,39436.5,247655,0,4.26,0,fail,1.165,unbounded recovery re-triggers: wait 18.6 >= 16.0 ms (B 584)
+f4-w310t4-crash-to2-w2,f4,pbft,w310t4,crash,2,2,16,4.0,144,128,16,0.125,recovered,0,1.0,1448,1448,0,155,0,3461.88,4410.24,0,4.26,0,ok,1.450,bounded and drained at 16 frames/round
+f4-w310t4-flood2,f4,pbft,w310t4,flood2,4,0,16,4.0,144,128,16,0.125,recovered,0,0.0,1449,1449,0,54,0,3477.79,3638,0,4.26,0,ok,,"flood within C5, no recovery"
+f4-w310t4-crash-to4-w0,f4,pbft,w310t4,crash,4,0,16,4.0,144,128,16,0.125,storm,1,77.2,343,1449,0,800,249064,23655,254553,0,4.26,0,fail,1.125,unbounded recovery re-triggers: wait 18.0 >= 16.0 ms (B 576)
+f4-w310t4-equivocate-w0,f4,pbft,w310t4,equivocate,4,0,16,4.0,144,128,16,0.125,storm,1,70.4,329,1449,0,800,246801,23686.4,252646,0,4.26,0,fail,1.138,unbounded recovery re-triggers: wait 18.2 >= 16.0 ms (B 584)
+f4-w320t4-crash-to2-w2,f4,pbft,w320t4,crash,2,2,16,4.0,148,128,20,0.156,recovered,0,1.0,1448,1448,0,140,0,3418.77,3587.41,0,4.26,0,ok,1.423,bounded and drained at 20 frames/round
+f4-w320t4-flood2,f4,pbft,w320t4,flood2,4,0,16,4.0,148,128,20,0.156,recovered,0,0.0,1449,1449,0,48,0,3435.73,3613.56,0,4.26,0,ok,,"flood within C5, no recovery"
+f4-w320t4-crash-to4-w0,f4,pbft,w320t4,crash,4,0,16,4.0,148,128,20,0.156,storm,1,73.7,393,1449,0,800,236171,31493.8,252419,0,4.26,0,fail,1.101,unbounded recovery re-triggers: wait 17.6 >= 16.0 ms (B 576)
+f4-w320t4-equivocate-w0,f4,pbft,w320t4,equivocate,4,0,16,4.0,148,128,20,0.156,storm,1,79.5,344,1449,0,800,264995,32476.9,254426,0,4.26,0,fail,1.113,unbounded recovery re-triggers: wait 17.8 >= 16.0 ms (B 584)
+f4-w330t4-crash-to2-w2,f4,pbft,w330t4,crash,2,2,16,4.0,156,128,28,0.219,recovered,0,1.0,1448,1448,0,137,0,3411.09,3570.54,0,4.26,0,ok,1.373,bounded and drained at 28 frames/round
+f4-w330t4-crash-to4-w0,f4,pbft,w330t4,crash,4,0,16,4.0,156,128,28,0.219,storm,1,79.5,398,1449,0,800,238289,32486.2,253426,0,4.26,0,fail,1.056,unbounded recovery re-triggers: wait 16.9 >= 16.0 ms (B 576)
+f4-w330t4-flood2,f4,pbft,w330t4,flood2,4,0,16,4.0,156,128,28,0.219,recovered,0,0.0,1449,1449,0,46,0,3419.62,3562.96,0,4.26,0,ok,,"flood within C5, no recovery"
+f4-w330t4-equivocate-w0,f4,pbft,w330t4,equivocate,4,0,16,4.0,156,128,28,0.219,storm,1,78.5,352,1449,0,800,248141,28671.7,255420,0,4.26,0,fail,1.067,unbounded recovery re-triggers: wait 17.1 >= 16.0 ms (B 584)
+f4-w340t4-crash-to4-w0,f4,pbft,w340t4,crash,4,0,16,4.0,160,128,32,0.250,recovered,0,1.0,1449,1449,0,348,0,2730.75,8494.76,0,4.26,0,fail,1.035,unbounded recovery re-triggers: wait 16.6 >= 16.0 ms (B 576)
+f4-w340t4-crash-to2-w2,f4,pbft,w340t4,crash,2,2,16,4.0,160,128,32,0.250,recovered,0,1.0,1448,1448,0,137,0,2730.75,3553.68,0,4.26,0,ok,1.350,bounded and drained at 32 frames/round
+f4-w340t4-flood2,f4,pbft,w340t4,flood2,4,0,16,4.0,160,128,32,0.250,recovered,0,0.0,1449,1449,0,44,0,2730.75,3528.38,0,4.26,0,ok,,"flood within C5, no recovery"
+f4-w340t4-equivocate-w0,f4,pbft,w340t4,equivocate,4,0,16,4.0,160,128,32,0.250,storm,1,80.5,364,1449,0,800,268637,36511.5,253528,0,4.26,0,fail,1.046,unbounded recovery re-triggers: wait 16.7 >= 16.0 ms (B 584)
+f4-w360t4-crash-to4-w0,f4,pbft,w360t4,crash,4,0,16,4.0,168,128,40,0.312,recovered,0,1.0,1449,1449,0,332,0,2663.4,6494.66,0,4.26,0,ok,0.996,recovers: wait 15.9 < timeout 16.0 ms (B 576)
+f4-w360t4-crash-to2-w2,f4,pbft,w360t4,crash,2,2,16,4.0,168,128,40,0.312,recovered,0,1.0,1448,1448,0,127,0,2663.4,3503.19,0,4.26,0,ok,1.307,bounded and drained at 40 frames/round
+f4-w360t4-flood2,f4,pbft,w360t4,flood2,4,0,16,4.0,168,128,40,0.312,recovered,0,0.0,1449,1449,0,41,0,2688.69,3494.66,0,4.26,0,ok,,"flood within C5, no recovery"
+f4-w380t4-crash-to4-w0,f4,pbft,w380t4,crash,4,0,16,4.0,180,128,52,0.406,recovered,0,1.0,1449,1449,0,298,0,2621.24,3452.6,0,4.26,0,ok,0.945,recovers: wait 15.1 < timeout 16.0 ms (B 576)
+f4-w360t4-equivocate-w0,f4,pbft,w360t4,equivocate,4,0,16,4.0,168,128,40,0.312,storm,1,90.4,421,1449,0,800,274108,32443.3,252536,0,4.26,0,fail,1.007,unbounded recovery re-triggers: wait 16.1 >= 16.0 ms (B 584)
+f4-w380t4-crash-to2-w2,f4,pbft,w380t4,crash,2,2,16,4.0,180,128,52,0.406,recovered,0,1.0,1448,1448,0,123,0,2621.24,3452.6,0,4.26,0,ok,1.250,bounded and drained at 52 frames/round
+f4-w380t4-equivocate-w0,f4,pbft,w380t4,equivocate,4,0,16,4.0,180,128,52,0.406,recovered,0,1.0,1449,1449,0,294,0,2612.8,4688.69,0,4.26,0,ok,0.955,recovers: wait 15.3 < timeout 16.0 ms (B 584)
+f4-w380t4-flood2,f4,pbft,w380t4,flood2,4,0,16,4.0,180,128,52,0.406,recovered,0,0.0,1449,1449,0,39,0,2630.42,3418.77,0,4.26,0,ok,,"flood within C5, no recovery"
+f4-w400t4-crash-to4-w0,f4,pbft,w400t4,crash,4,0,16,4.0,188,128,60,0.469,recovered,0,1.0,1449,1449,0,300,0,2579.08,2781.44,0,4.26,0,ok,0.914,recovers: wait 14.6 < timeout 16.0 ms (B 576)
+f4-w400t4-crash-to2-w2,f4,pbft,w400t4,crash,2,2,16,4.0,188,128,60,0.469,recovered,0,1.0,1448,1448,0,101,0,2579.08,2781.44,0,4.26,0,ok,1.216,bounded and drained at 60 frames/round
+f4-w400t4-equivocate-w0,f4,pbft,w400t4,equivocate,4,0,16,4.0,188,128,60,0.469,recovered,0,1.0,1449,1449,0,296,0,2570.64,3545.35,0,4.26,0,ok,0.924,recovers: wait 14.8 < timeout 16.0 ms (B 584)
+f4-w400t4-flood2,f4,pbft,w400t4,flood2,4,0,16,4.0,188,128,60,0.469,recovered,0,0.0,1449,1449,0,38,0,2587.41,2739.28,0,4.26,0,ok,,"flood within C5, no recovery"
+f4-w440t4-crash-to4-w0,f4,pbft,w440t4,crash,4,0,16,4.0,208,128,80,0.625,recovered,0,1.0,1449,1449,0,275,0,2494.76,2671.73,0,4.26,0,ok,0.848,recovers: wait 13.6 < timeout 16.0 ms (B 576)
+f4-w440t4-crash-to2-w2,f4,pbft,w440t4,crash,2,2,16,4.0,208,128,80,0.625,recovered,0,1.0,1448,1448,0,92,0,2494.76,2671.73,0,4.26,0,ok,1.142,bounded and drained at 80 frames/round
+f4-w440t4-equivocate-w0,f4,pbft,w440t4,equivocate,4,0,16,4.0,208,128,80,0.625,recovered,0,1.0,1449,1449,0,295,0,2494.76,2570.64,0,4.26,0,ok,0.857,recovers: wait 13.7 < timeout 16.0 ms (B 584)
+f4-w440t4-flood2,f4,pbft,w440t4,flood2,4,0,16,4.0,208,128,80,0.625,recovered,0,0.0,1449,1449,0,36,0,2495.51,2638.85,0,4.26,0,ok,,"flood within C5, no recovery"
+f5-n7c32t4-crash-to4-w0,f5,pbft,n7c32t4,crash,4,0,7,4.0,32,24,8,0.333,recovered,0,1.0,1449,1449,0,78,0,3444.06,6410.24,0,4.26,0,ok,0.984,recovers: wait 15.8 < timeout 16.0 ms (B 108)
+f5-n7c28t4-equivocate-w0,f5,pbft,n7c28t4,equivocate,4,0,7,4.0,28,24,4,0.167,storm,1,14.0,1101,1449,0,800,1315,3453.45,222445,0,4.26,0,fail,1.117,unbounded recovery re-triggers: wait 17.9 >= 16.0 ms (B 111)
+f5-n7c28t4-crash-to4-w0,f5,pbft,n7c28t4,crash,4,0,7,4.0,28,24,4,0.167,storm,1,40.0,274,1449,0,800,10917,32434.8,254436,0,4.26,0,fail,1.093,unbounded recovery re-triggers: wait 17.5 >= 16.0 ms (B 108)
+f5-n7c32t4-equivocate-w0,f5,pbft,n7c32t4,equivocate,4,0,7,4.0,32,24,8,0.333,storm,1,65.1,327,1449,0,800,8986,116452,254420,0,4.26,0,fail,1.005,unbounded recovery re-triggers: wait 16.1 >= 16.0 ms (B 111)
+f5-n7c36t4-crash-to4-w0,f5,pbft,n7c36t4,crash,4,0,7,4.0,36,24,12,0.500,recovered,0,1.0,1449,1449,0,72,0,3435.73,3477.89,0,4.26,0,ok,0.900,recovers: wait 14.4 < timeout 16.0 ms (B 108)
+f5-n7c36t4-equivocate-w0,f5,pbft,n7c36t4,equivocate,4,0,7,4.0,36,24,12,0.500,recovered,0,1.0,1449,1449,0,63,0,3435.63,4427.2,0,4.26,0,ok,0.919,recovers: wait 14.7 < timeout 16.0 ms (B 111)
+f5-n7c40t4-crash-to4-w0,f5,pbft,n7c40t4,crash,4,0,7,4.0,40,24,16,0.667,recovered,0,1.0,1449,1449,0,68,0,3418.77,3477.89,0,4.26,0,ok,0.833,recovers: wait 13.3 < timeout 16.0 ms (B 108)
+f5-n7c40t4-equivocate-w0,f5,pbft,n7c40t4,equivocate,4,0,7,4.0,40,24,16,0.667,recovered,0,1.0,1449,1449,0,72,0,2470.31,3435.73,0,4.26,0,ok,0.849,recovers: wait 13.6 < timeout 16.0 ms (B 111)
+f5-n10c52t4-crash-to4-w0,f5,pbft,n10c52t4,crash,4,0,10,4.0,52,48,4,0.083,storm,1,17.2,239,1330,0,800,2191,3486.22,249502,0,4.26,0,fail,1.160,unbounded recovery re-triggers: wait 18.6 >= 16.0 ms (B 216)
+f5-n7c44t4-crash-to4-w0,f5,pbft,n7c44t4,crash,4,0,7,4.0,44,24,20,0.833,recovered,0,1.0,1449,1449,0,63,0,2494.66,3477.89,0,4.26,0,ok,0.777,recovers: wait 12.4 < timeout 16.0 ms (B 108)
+f5-n7c44t4-equivocate-w0,f5,pbft,n7c44t4,equivocate,4,0,7,4.0,44,24,20,0.833,recovered,0,1.0,1449,1449,0,56,0,2477.99,3411.09,0,4.26,0,ok,0.793,recovers: wait 12.7 < timeout 16.0 ms (B 111)
+f5-n10c52t4-equivocate-w0,f5,pbft,n10c52t4,equivocate,4,0,10,4.0,52,48,4,0.083,storm,1,54.5,332,1441,0,800,34981,24511.5,252486,0,4.26,0,fail,1.177,unbounded recovery re-triggers: wait 18.8 >= 16.0 ms (B 220)
+f5-n10c60t4-crash-to4-w0,f5,pbft,n10c60t4,crash,4,0,10,4.0,60,48,12,0.250,recovered,0,1.0,1449,1449,0,155,0,3468.51,9411.94,0,4.26,0,fail,1.035,unbounded recovery re-triggers: wait 16.6 >= 16.0 ms (B 216)
+f5-n10c56t4-crash-to4-w0,f5,pbft,n10c56t4,crash,4,0,10,4.0,56,48,8,0.167,storm,1,54.3,322,1448,0,800,34217,27486.2,254485,0,4.26,0,fail,1.093,unbounded recovery re-triggers: wait 17.5 >= 16.0 ms (B 216)
+f5-n10c56t4-equivocate-w0,f5,pbft,n10c56t4,equivocate,4,0,10,4.0,56,48,8,0.167,storm,1,57.4,323,1449,0,800,34496,59511.5,254436,0,4.26,0,fail,1.109,unbounded recovery re-triggers: wait 17.7 >= 16.0 ms (B 220)
+f5-n10c64t4-crash-to4-w0,f5,pbft,n10c64t4,crash,4,0,10,4.0,64,48,16,0.333,recovered,0,1.0,1449,1449,0,133,0,3451.64,5461.03,0,4.26,0,ok,0.984,recovers: wait 15.8 < timeout 16.0 ms (B 216)
+f5-n10c60t4-equivocate-w0,f5,pbft,n10c60t4,equivocate,4,0,10,4.0,60,48,12,0.250,storm,1,71.6,378,1449,0,800,35252,133478,254427,0,4.26,0,fail,1.050,unbounded recovery re-triggers: wait 16.8 >= 16.0 ms (B 220)
+f5-n10c68t4-crash-to4-w0,f5,pbft,n10c68t4,crash,4,0,10,4.0,68,48,20,0.417,recovered,0,1.0,1449,1449,0,111,0,3427.3,3494.76,0,4.26,0,ok,0.940,recovers: wait 15.0 < timeout 16.0 ms (B 216)
+f5-n10c64t4-equivocate-w0,f5,pbft,n10c64t4,equivocate,4,0,10,4.0,64,48,16,0.333,storm,1,73.4,464,1449,0,800,31483,94410.2,253478,0,4.26,0,ok,0.998,recovers: wait 16.0 < timeout 16.0 ms (B 220)
+f5-n10c68t4-equivocate-w0,f5,pbft,n10c68t4,equivocate,4,0,10,4.0,68,48,20,0.417,recovered,0,1.0,1449,1449,0,111,0,3435.63,5494.76,0,4.26,0,ok,0.953,recovers: wait 15.2 < timeout 16.0 ms (B 220)
+f5-n10c72t4-crash-to4-w0,f5,pbft,n10c72t4,crash,4,0,10,4.0,72,48,24,0.500,recovered,0,1.0,1449,1449,0,111,0,3409.38,3494.76,0,4.26,0,ok,0.900,recovers: wait 14.4 < timeout 16.0 ms (B 216)
+f5-n10c72t4-equivocate-w0,f5,pbft,n10c72t4,equivocate,4,0,10,4.0,72,48,24,0.500,recovered,0,1.0,1449,1449,0,103,0,3409.38,3476.94,0,4.26,0,ok,0.912,recovers: wait 14.6 < timeout 16.0 ms (B 220)
+f5-n10c80t4-crash-to4-w0,f5,pbft,n10c80t4,crash,4,0,10,4.0,80,48,32,0.667,recovered,0,1.0,1449,1449,0,101,0,2553.68,3443.21,0,4.26,0,ok,0.833,recovers: wait 13.3 < timeout 16.0 ms (B 216)
+f5-n10c80t4-equivocate-w0,f5,pbft,n10c80t4,equivocate,4,0,10,4.0,80,48,32,0.667,recovered,0,1.0,1449,1449,0,107,0,2545.35,3443.21,0,4.26,0,ok,0.844,recovers: wait 13.5 < timeout 16.0 ms (B 220)
+f5-n13c92t4-crash-to4-w0,f5,pbft,n13c92t4,crash,4,0,13,4.0,92,84,8,0.095,storm,1,55.4,321,1449,0,800,99751,19546.1,251545,0,4.26,0,fail,1.149,unbounded recovery re-triggers: wait 18.4 >= 16.0 ms (B 378)
+f5-n13c92t4-equivocate-w0,f5,pbft,n13c92t4,equivocate,4,0,13,4.0,92,84,8,0.095,storm,1,64.8,324,1449,0,800,106206,24595,252578,0,4.26,0,fail,1.164,unbounded recovery re-triggers: wait 18.6 >= 16.0 ms (B 384)
+f5-n13c96t4-crash-to4-w0,f5,pbft,n13c96t4,crash,4,0,13,4.0,96,84,12,0.143,storm,1,60.7,307,1449,0,800,112963,3552.93,254435,0,4.26,0,fail,1.111,unbounded recovery re-triggers: wait 17.8 >= 16.0 ms (B 378)
+f5-n13c96t4-equivocate-w0,f5,pbft,n13c96t4,equivocate,4,0,13,4.0,96,84,12,0.143,storm,1,66.4,285,1427,0,800,109178,3552.93,255427,0,4.26,0,fail,1.125,unbounded recovery re-triggers: wait 18.0 >= 16.0 ms (B 384)
+f5-n13c104t4-crash-to4-w0,f5,pbft,n13c104t4,crash,4,0,13,4.0,104,84,20,0.238,recovered,0,1.0,1449,1449,0,245,0,3485.37,8528.48,0,4.26,0,fail,1.043,unbounded recovery re-triggers: wait 16.7 >= 16.0 ms (B 378)
+f5-n13c112t4-crash-to4-w0,f5,pbft,n13c112t4,crash,4,0,13,4.0,112,84,28,0.333,recovered,0,1.0,1449,1449,0,197,0,3461.03,5410.24,0,4.26,0,ok,0.984,recovers: wait 15.8 < timeout 16.0 ms (B 378)
+f5-n13c104t4-equivocate-w0,f5,pbft,n13c104t4,equivocate,4,0,13,4.0,104,84,20,0.238,storm,1,64.4,340,1362,0,800,115142,24613.6,253570,0,4.26,0,fail,1.056,unbounded recovery re-triggers: wait 16.9 >= 16.0 ms (B 384)
+f5-n13c112t4-equivocate-w0,f5,pbft,n13c112t4,equivocate,4,0,13,4.0,112,84,28,0.333,churn,0,11.0,1447,1449,0,259,0,3411.94,16587.5,0,4.26,0,ok,0.996,recovers: wait 15.9 < timeout 16.0 ms (B 384)
+f5-n13c120t4-crash-to4-w0,f5,pbft,n13c120t4,crash,4,0,13,4.0,120,84,36,0.429,recovered,0,1.0,1449,1449,0,191,0,2638,3494.76,0,4.26,0,ok,0.934,recovers: wait 14.9 < timeout 16.0 ms (B 378)
+f5-n13c120t4-equivocate-w0,f5,pbft,n13c120t4,equivocate,4,0,13,4.0,120,84,36,0.429,recovered,0,1.0,1449,1449,0,185,0,2629.57,4452.6,0,4.26,0,ok,0.945,recovers: wait 15.1 < timeout 16.0 ms (B 384)
+f5-n13c128t4-crash-to4-w0,f5,pbft,n13c128t4,crash,4,0,13,4.0,128,84,44,0.524,recovered,0,1.0,1449,1449,0,187,0,2612.7,3452.6,0,4.26,0,ok,0.889,recovers: wait 14.2 < timeout 16.0 ms (B 378)
+f5-n13c128t4-equivocate-w0,f5,pbft,n13c128t4,equivocate,4,0,13,4.0,128,84,44,0.524,recovered,0,1.0,1449,1449,0,169,0,2604.27,3452.6,0,4.26,0,ok,0.900,recovers: wait 14.4 < timeout 16.0 ms (B 384)
+f5-n13c136t4-crash-to4-w0,f5,pbft,n13c136t4,crash,4,0,13,4.0,136,84,52,0.619,recovered,0,1.0,1449,1449,0,174,0,2587.41,3409.38,0,4.26,0,ok,0.850,recovers: wait 13.6 < timeout 16.0 ms (B 378)
+f5-n13c136t4-equivocate-w0,f5,pbft,n13c136t4,equivocate,4,0,13,4.0,136,84,52,0.619,recovered,0,1.0,1449,1449,0,167,0,2587.41,3409.38,0,4.26,0,ok,0.860,recovers: wait 13.8 < timeout 16.0 ms (B 384)
+p2-hsk2t4-none-to0.5,p2,hotstuff,hsk2t4,none,0.5,0,16,4.0,8,16,-8,-0.500,storm,1,11.0,0,516,0,800,18190,0,0,0,4.26,0,fail,,C5: 16 > 8
+p2-hsk2t4-crash-to2,p2,hotstuff,hsk2t4,crash,2,0,16,4.0,8,16,-8,-0.500,storm,1,8.9,0,1028,0,800,40371,0,0,0,4.26,0,fail,,C5: 16 > 8
+p2-hsk2t4-flood2,p2,hotstuff,hsk2t4,flood2,4,0,16,4.0,8,16,-8,-0.500,storm,1,9.6,1,1153,0,800,37607,68411.9,88419.5,0,4.26,0,fail,,C5: 16 > 8
+p2-hsk2t4-crash-to4,p2,hotstuff,hsk2t4,crash,4,0,16,4.0,8,16,-8,-0.500,storm,1,9.5,1,1153,0,800,43772,68411.9,88419.5,0,4.26,0,fail,,C5: 16 > 8
+p2-hsk2t4-equivocate,p2,hotstuff,hsk2t4,equivocate,4,0,16,4.0,8,16,-8,-0.500,storm,1,9.6,1,1153,0,800,37607,68411.9,88419.5,0,4.26,0,fail,,C5: 16 > 8
+p2-hsk3t4-crash-to4,p2,hotstuff,hsk3t4,crash,4,0,16,4.0,12,16,-4,-0.250,storm,1,19.5,111,1407,0,800,38918,855420,1.21641e+06,0,4.26,0,fail,,C5: 16 > 12
+p2-hsk3t4-crash-to2,p2,hotstuff,hsk3t4,crash,2,0,16,4.0,12,16,-4,-0.250,storm,1,18.9,18,1317,0,800,60751,151412,745418,0,4.26,0,fail,,C5: 16 > 12
+p2-hsk3t4-none-to0.5,p2,hotstuff,hsk3t4,none,0.5,0,16,4.0,12,16,-4,-0.250,storm,1,20.0,17,1107,0,800,38754,250427,318426,0,4.26,0,fail,,C5: 16 > 12
+p2-hsk3t4-flood2,p2,hotstuff,hsk3t4,flood2,4,0,16,4.0,12,16,-4,-0.250,storm,1,19.8,111,863,0,800,33755,841420,1.17543e+06,0,4.26,0,fail,,C5: 16 > 12
+p2-hsk4t4-crash-to2,p2,hotstuff,hsk4t4,crash,2,0,16,4.0,16,16,0,0.000,storm,1,20.9,28,698,0,800,23306,33418.8,537427,0,4.26,0,ok,0.997,recovers: wait 8.0 < timeout 8.0 ms (B 31)
+p2-hsk4t4-crash-to4,p2,hotstuff,hsk4t4,crash,4,0,16,4.0,16,16,0,0.000,storm,1,16.4,265,1328,0,800,26504,35409.4,166410,0,4.26,0,ok,0.920,recovers: wait 14.7 < timeout 16.0 ms (B 61)
+p2-hsk3t4-equivocate,p2,hotstuff,hsk3t4,equivocate,4,0,16,4.0,12,16,-4,-0.250,storm,1,19.8,111,863,0,800,33755,841420,1.17543e+06,0,4.26,0,fail,,C5: 16 > 12
+p2-hsk4t4-none-to0.5,p2,hotstuff,hsk4t4,none,0.5,0,16,4.0,16,16,0,0.000,storm,1,22.8,10,1112,0,800,33201,54435.6,153436,0,4.26,0,ok,,no trigger: L0 1.0 < timeout 2.0 ms
+p2-hsk4t4-equivocate,p2,hotstuff,hsk4t4,equivocate,4,0,16,4.0,16,16,0,0.000,churn,0,28.9,1440,1449,0,136,0,35434.9,107420,0,4.26,0,ok,0.920,recovers: wait 14.7 < timeout 16.0 ms (B 61)
+p2-hsk4t4-flood2,p2,hotstuff,hsk4t4,flood2,4,0,16,4.0,16,16,0,0.000,churn,0,10.8,1439,1448,0,62,0,35411.9,52417.9,0,4.26,0,ok,,"flood within C5, no recovery"
+p2-raftk4t4-crash-to4,p2,raft,raftk4t4,crash,4,0,16,4.0,16,15,1,0.067,storm,1,48.9,573,1428,0,800,50277,9434.88,42426.4,0,4.26,0,fail,3.867,unbounded recovery re-triggers: wait 92.8 >= 24.0 ms (B 375)
+p2-raftk4t4-crash-to2,p2,raft,raftk4t4,crash,2,0,16,4.0,16,15,1,0.067,storm,1,176.8,198,1445,0,800,57152,6411.09,8427.3,0,4.26,0,fail,7.734,unbounded recovery re-triggers: wait 92.8 >= 12.0 ms (B 375)
+p2-raftk4t4-flood2,p2,raft,raftk4t4,flood2,4,0,16,4.0,16,15,1,0.067,recovered+delay,0,0.0,1448,1449,0,15,0,7409.38,12427.3,0,4.26,0,ok,,"flood within C5, no recovery"
+p2-raftk5t4-crash-to4,p2,raft,raftk5t4,crash,4,0,16,4.0,20,15,5,0.333,storm,1,44.2,574,1371,0,800,49253,6410.24,25426.4,0,4.26,0,fail,3.123,unbounded recovery re-triggers: wait 74.9 >= 24.0 ms (B 375)
+p2-raftk4t4-none-to0.5,p2,raft,raftk4t4,none,0.5,0,16,4.0,16,15,1,0.067,churn,0,1000.0,0,0,0,800,144037,0,0,0,4.26,0,fail,3.935,unbounded recovery re-triggers: wait 11.8 >= 3.0 ms (B 15)
+p2-raftk5t4-crash-to2,p2,raft,raftk5t4,crash,2,0,16,4.0,20,15,5,0.333,storm,1,161.4,198,1368,0,800,39195,6410.24,7435.73,0,4.26,0,fail,6.245,unbounded recovery re-triggers: wait 74.9 >= 12.0 ms (B 375)
+p2-raftk5t4-flood2,p2,raft,raftk5t4,flood2,4,0,16,4.0,20,15,5,0.333,recovered+delay,0,0.0,1448,1449,0,15,0,5434.98,7435.73,0,4.26,0,ok,,"flood within C5, no recovery"
+p2-raftk6t4-crash-to4,p2,raft,raftk6t4,crash,4,0,16,4.0,24,15,9,0.600,storm,1,35.3,574,1434,0,800,44126,5443.31,22435.7,0,4.26,0,fail,2.535,unbounded recovery re-triggers: wait 60.9 >= 24.0 ms (B 375)
+p2-raftk6t4-crash-to2,p2,raft,raftk6t4,crash,2,0,16,4.0,24,15,9,0.600,storm,1,107.4,574,1439,0,800,52912,5443.31,10426.4,0,4.26,0,fail,5.071,unbounded recovery re-triggers: wait 60.9 >= 12.0 ms (B 375)
+p2-raftk6t4-flood2,p2,raft,raftk6t4,flood2,4,0,16,4.0,24,15,9,0.600,recovered+delay,0,0.0,1448,1449,0,15,0,5426.45,7411.94,0,4.26,0,ok,,"flood within C5, no recovery"
+p2-raftk6t4-none-to0.5,p2,raft,raftk6t4,none,0.5,0,16,4.0,24,15,9,0.600,storm,1,1000.0,0,1449,0,800,2881751,0,0,0,4.26,0,fail,2.283,unbounded recovery re-triggers: wait 6.8 >= 3.0 ms (B 15)
+p2-raftk5t4-none-to0.5,p2,raft,raftk5t4,none,0.5,0,16,4.0,20,15,5,0.333,storm,1,1000.0,0,1449,0,800,4366901,0,0,0,4.26,0,fail,3.380,unbounded recovery re-triggers: wait 10.1 >= 3.0 ms (B 15)
+p1-pbftk33t4-none,p1,pbft,pbftk33t4,none,4,0,16,4.0,132,128,4,0.031,recovered,0,0.0,1449,1449,0,39,0,3587.51,4477.79,0,4.26,0,ok,,no trigger: L0 3.6 < timeout 16.0 ms
+p1-pbftk32t4-none,p1,pbft,pbftk32t4,none,4,0,16,4.0,128,128,0,0.000,recovered,0,0.0,1449,1449,0,41,0,3536.82,4419.62,0,4.26,0,ok,,no trigger: L0 3.6 < timeout 16.0 ms
+p1-pbftk35t4-none,p1,pbft,pbftk35t4,none,4,0,16,4.0,140,128,12,0.094,recovered,0,0.0,1449,1449,0,46,0,3486.32,3630.42,0,4.26,0,ok,,no trigger: L0 3.6 < timeout 16.0 ms
+p1-hsk1t4-none,p1,hotstuff,hsk1t4,none,4,0,16,4.0,4,16,-12,-0.750,storm,1,8.0,0,1025,0,800,26035,0,0,0,4.26,0,fail,,C5: 16 > 4
+p1-hsk2t4-none,p1,hotstuff,hsk2t4,none,4,0,16,4.0,8,16,-8,-0.500,storm,1,9.6,1,1153,0,800,37607,68411.9,88419.5,0,4.26,0,fail,,C5: 16 > 8
+p1-hsk3t4-none,p1,hotstuff,hsk3t4,none,4,0,16,4.0,12,16,-4,-0.250,storm,1,19.8,111,863,0,800,33755,841420,1.17543e+06,0,4.26,0,fail,,C5: 16 > 12
+p1-hsk4t4-none,p1,hotstuff,hsk4t4,none,4,0,16,4.0,16,16,0,0.000,churn,0,11.0,1440,1449,0,46,0,34435.7,43428.1,0,4.26,0,ok,,no trigger: L0 1.0 < timeout 16.0 ms
+p1-hsk35t4-none,p1,hotstuff,hsk35t4,none,4,0,16,4.0,140,16,124,7.750,recovered,0,0.0,1446,1449,0,16,0,12485.6,12561.6,0,4.26,0,ok,,no trigger: L0 1.0 < timeout 16.0 ms
+p1-raftk3t4-none,p1,raft,raftk3t4,none,4,0,16,4.0,12,15,-3,-0.200,storm,1,70.4,214,1417,0,800,63190,237412,483419,0,4.26,0,fail,,C5: 15 > 12
+p1-pbftk31t4-none,p1,pbft,pbftk31t4,none,4,0,16,4.0,124,128,-4,-0.031,storm,1,72.6,156,1449,0,800,243975,72562.1,253479,0,4.26,0,fail,,C5: 128 > 124
+p1-raftk4t4-none,p1,raft,raftk4t4,none,4,0,16,4.0,16,15,1,0.067,recovered+delay,0,0.0,1448,1449,0,15,0,6411.09,8427.3,0,4.26,0,ok,,no trigger: L0 8.4 < timeout 24.0 ms
+p1-raftk5t4-none,p1,raft,raftk5t4,none,4,0,16,4.0,20,15,5,0.333,recovered+delay,0,0.0,1448,1449,0,15,0,5434.98,7435.73,0,4.26,0,ok,,no trigger: L0 7.4 < timeout 24.0 ms
+p1-raftk35t4-none,p1,raft,raftk35t4,none,4,0,16,4.0,140,15,125,8.333,recovered,0,0.0,1448,1449,0,15,0,4477.14,4561.56,0,4.26,0,ok,,no trigger: L0 4.6 < timeout 24.0 ms
+p3-hsk4t4-crash-to2,p3,hotstuff,hsk4t4,crash,2,0,16,4.0,16,16,0,0.000,storm,1,20.9,28,698,0,800,23306,33418.8,537427,0,4.26,0,ok,0.997,recovers: wait 8.0 < timeout 8.0 ms (B 31)
+p3-hsk4t4-crash-to4,p3,hotstuff,hsk4t4,crash,4,0,16,4.0,16,16,0,0.000,storm,1,16.4,265,1328,0,800,26504,35409.4,166410,0,4.26,0,ok,0.920,recovers: wait 14.7 < timeout 16.0 ms (B 61)
+p3-hsk4t4-equivocate,p3,hotstuff,hsk4t4,equivocate,4,0,16,4.0,16,16,0,0.000,churn,0,28.9,1440,1449,0,136,0,35434.9,107420,0,4.26,0,ok,0.920,recovers: wait 14.7 < timeout 16.0 ms (B 61)
+p3-hsk4t4-flood2,p3,hotstuff,hsk4t4,flood2,4,0,16,4.0,16,16,0,0.000,churn,0,10.8,1439,1448,0,62,0,35411.9,52417.9,0,4.26,0,ok,,"flood within C5, no recovery"
+p3-hsk5t4-crash-to4,p3,hotstuff,hsk5t4,crash,4,0,16,4.0,20,16,4,0.250,churn,0,12.2,1445,1449,0,91,0,19409.4,63444.9,0,4.26,0,ok,0.749,recovers: wait 12.0 < timeout 16.0 ms (B 61)
+p3-hsk5t4-crash-to2,p3,hotstuff,hsk5t4,crash,2,0,16,4.0,20,16,4,0.250,churn,0,39.6,1445,1449,0,61,0,18445.1,46445.8,0,4.26,0,ok,0.823,recovers: wait 6.6 < timeout 8.0 ms (B 31)
+p3-hsk5t4-equivocate,p3,hotstuff,hsk5t4,equivocate,4,0,16,4.0,20,16,4,0.250,churn,0,14.0,1445,1449,0,91,0,18435.8,61417.9,0,4.26,0,ok,0.749,recovers: wait 12.0 < timeout 16.0 ms (B 61)
+p3-hsk5t4-flood2,p3,hotstuff,hsk5t4,flood2,4,0,16,4.0,20,16,4,0.250,recovered,0,0.0,1445,1449,0,32,0,18426.3,23428.1,0,4.26,0,ok,,"flood within C5, no recovery"
+p3-hsk6t4-crash-to4,p3,hotstuff,hsk6t4,crash,4,0,16,4.0,24,16,8,0.500,churn,0,15.0,1445,1449,0,91,0,16445,55452.6,0,4.26,0,ok,0.634,recovers: wait 10.2 < timeout 16.0 ms (B 61)
+p3-hsk6t4-crash-to2,p3,hotstuff,hsk6t4,crash,2,0,16,4.0,24,16,8,0.500,churn,0,19.0,1445,1449,0,61,0,17429,41445.8,0,4.26,0,ok,0.706,recovers: wait 5.7 < timeout 8.0 ms (B 31)
+p3-hsk6t4-equivocate,p3,hotstuff,hsk6t4,equivocate,4,0,16,4.0,24,16,8,0.500,churn,0,16.0,1445,1449,0,91,0,17429,53444.1,0,4.26,0,ok,0.634,recovers: wait 10.2 < timeout 16.0 ms (B 61)
+p3-hsk6t4-flood2,p3,hotstuff,hsk6t4,flood2,4,0,16,4.0,24,16,8,0.500,recovered,0,0.0,1445,1449,0,32,0,16428.9,20454.4,0,4.26,0,ok,,"flood within C5, no recovery"
+p3-hsk7t4-crash-to4,p3,hotstuff,hsk7t4,crash,4,0,16,4.0,28,16,12,0.750,churn,0,16.9,1446,1449,0,91,0,14419.6,46417.9,0,4.26,0,ok,0.553,recovers: wait 8.8 < timeout 16.0 ms (B 61)
+p3-hsk7t4-crash-to2,p3,hotstuff,hsk7t4,crash,2,0,16,4.0,28,16,12,0.750,churn,0,20.3,1446,1449,0,61,0,13461,34419.6,0,4.26,0,ok,0.623,recovers: wait 5.0 < timeout 8.0 ms (B 31)
+p3-hsk7t4-equivocate,p3,hotstuff,hsk7t4,equivocate,4,0,16,4.0,28,16,12,0.750,churn,0,19.0,1446,1449,0,91,0,14411.9,45460.9,0,4.26,0,ok,0.553,recovers: wait 8.8 < timeout 16.0 ms (B 61)
+p3-hsk7t4-flood2,p3,hotstuff,hsk7t4,flood2,4,0,16,4.0,28,16,12,0.750,recovered,0,0.0,1446,1449,0,32,0,13427.2,14462.9,0,4.26,0,ok,,"flood within C5, no recovery"
+p3-hsk8t4-crash-to4,p3,hotstuff,hsk8t4,crash,4,0,16,4.0,32,16,16,1.000,churn,0,19.7,1446,1449,0,91,0,13418.8,43409.4,0,4.26,0,ok,0.491,recovers: wait 7.9 < timeout 16.0 ms (B 61)
+p3-hsk8t4-crash-to2,p3,hotstuff,hsk8t4,crash,2,0,16,4.0,32,16,16,1.000,churn,0,21.6,1446,1449,0,61,0,13426.4,32453.4,0,4.26,0,ok,0.561,recovers: wait 4.5 < timeout 8.0 ms (B 31)
+p3-hsk8t4-equivocate,p3,hotstuff,hsk8t4,equivocate,4,0,16,4.0,32,16,16,1.000,churn,0,22.0,1446,1449,0,91,0,13426.4,38427.3,0,4.26,0,ok,0.491,recovers: wait 7.9 < timeout 16.0 ms (B 61)
+p3-hsk8t4-flood2,p3,hotstuff,hsk8t4,flood2,4,0,16,4.0,32,16,16,1.000,recovered,0,0.0,1446,1449,0,32,0,13418.8,14435.7,0,4.26,0,ok,,"flood within C5, no recovery"
+p3-raftk4c2t4-crash-to2,p3,raft,raftk4c2t4,crash,2,0,16,4.0,16,15,1,0.067,recovered,0,1.5,1448,1449,0,164,0,7427.3,1.04141e+06,0,4.26,0,ok,1.265,bounded and drained at 1 frames/round
+p3-raftk4c2t4-crash-to4,p3,raft,raftk4c2t4,crash,4,0,16,4.0,16,15,1,0.067,recovered,0,0.1,1448,1449,0,84,0,8427.3,1.04043e+06,0,4.26,0,ok,0.632,recovers: wait 15.2 < timeout 24.0 ms (B 30)
+p3-raftk4c4t4-crash-to4,p3,raft,raftk4c4t4,crash,4,0,16,4.0,16,15,1,0.067,recovered,0,0.1,1448,1449,0,266,0,8434.88,837426,0,4.26,0,ok,0.914,recovers: wait 21.9 < timeout 24.0 ms (B 60)
+p3-raftk4c4t4-crash-to2,p3,raft,raftk4c4t4,crash,2,0,16,4.0,16,15,1,0.067,storm,1,164.4,198,1447,0,209,0,6411.09,8427.3,0,4.26,0,ok,1.546,bounded and drained at 1 frames/round
+p3-raftk5c2t4-crash-to4,p3,raft,raftk5c2t4,crash,4,0,16,4.0,20,15,5,0.333,recovered,0,0.1,1448,1449,0,65,0,6410.24,1.04043e+06,0,4.26,0,ok,0.535,recovers: wait 12.8 < timeout 24.0 ms (B 30)
+p3-raftk5c2t4-crash-to2,p3,raft,raftk5c2t4,crash,2,0,16,4.0,20,15,5,0.333,recovered,0,0.2,1448,1449,0,45,0,6410.24,1.04043e+06,0,4.26,0,ok,1.070,bounded and drained at 5 frames/round
+p3-raftk5c4t4-crash-to4,p3,raft,raftk5c4t4,crash,4,0,16,4.0,20,15,5,0.333,recovered,0,0.1,1448,1449,0,75,0,6411.94,808443,0,4.26,0,ok,0.760,recovers: wait 18.2 < timeout 24.0 ms (B 60)
+p3-raftk6c2t4-crash-to4,p3,raft,raftk6c2t4,crash,4,0,16,4.0,24,15,9,0.600,recovered,0,0.1,1448,1449,0,54,0,5443.31,1.04043e+06,0,4.26,0,ok,0.379,recovers: wait 9.1 < timeout 24.0 ms (B 30)
+p3-raftk5c4t4-crash-to2,p3,raft,raftk5c4t4,crash,2,0,16,4.0,20,15,5,0.333,storm,1,126.2,202,1443,0,201,0,6410.24,64420.4,0,4.26,0,ok,1.295,bounded and drained at 5 frames/round
+p3-raftk6c2t4-crash-to2,p3,raft,raftk6c2t4,crash,2,0,16,4.0,24,15,9,0.600,recovered,0,0.1,1448,1449,0,42,0,5443.31,1.04043e+06,0,4.26,0,ok,0.758,recovers: wait 9.1 < timeout 12.0 ms (B 30)
+p3-raftk6c4t4-crash-to4,p3,raft,raftk6c4t4,crash,4,0,16,4.0,24,15,9,0.600,recovered,0,0.1,1448,1449,0,72,0,5443.31,808443,0,4.26,0,ok,0.567,recovers: wait 13.6 < timeout 24.0 ms (B 60)
+p3-raftk6c4t4-crash-to2,p3,raft,raftk6c4t4,crash,2,0,16,4.0,24,15,9,0.600,recovered,0,0.1,1448,1449,0,45,0,5443.31,808443,0,4.26,0,ok,0.946,recovers: wait 11.3 < timeout 12.0 ms (B 45)
+v1-pbftn16gk38t8-crash-to2-w0,v1,pbft,pbftn16gk38t8,crash,2,0,16,8.0,304,128,176,1.375,recovered,0,1.0,724,724,0,121,0,3427.2,3587.41,0,4.26,0,ok,0.699,recovers: wait 11.2 < timeout 16.0 ms (B 320)
+v1-pbftn16gk29t6-crash-to4-w0,v1,pbft,pbftn16gk29t6,crash,4,0,16,6.0,174,128,46,0.359,recovered,0,1.0,965,966,0,332,0,4417.92,14579,0,4.26,0,ok,0.895,recovers: wait 21.5 < timeout 24.0 ms (B 576)
+v1-pbftn16gk40t6-equivocate-to4-w0,v1,pbft,pbftn16gk40t6,equivocate,4,0,16,6.0,240,128,112,0.875,recovered,0,1.0,966,966,0,279,0,2731.6,4470.21,0,4.26,0,ok,0.698,recovers: wait 16.7 < timeout 24.0 ms (B 584)
+v1-pbftn16gk23t6-equivocate-to4-w0,v1,pbft,pbftn16gk23t6,equivocate,4,0,16,6.0,138,128,10,0.078,storm,1,47.0,209,966,0,800,159641,5444.06,381555,0,4.26,0,fail,1.102,unbounded recovery re-triggers: wait 26.5 >= 24.0 ms (B 584)
+v1-pbftn16gk27t8-crash-to2-w0,v1,pbft,pbftn16gk27t8,crash,2,0,16,8.0,216,128,88,0.688,recovered,0,1.0,724,724,0,150,0,4494.66,5427.2,0,4.26,0,ok,0.892,recovers: wait 14.3 < timeout 16.0 ms (B 320)
+v1-pbftn16gk17t8-crash-to2-w0,v1,pbft,pbftn16gk17t8,crash,2,0,16,8.0,136,128,8,0.062,storm,1,48.8,165,724,0,800,114077,6495.51,496444,0,4.26,0,fail,1.284,unbounded recovery re-triggers: wait 20.5 >= 16.0 ms (B 320)
+v1-pbftn16gk21t8-crash-to2-w0,v1,pbft,pbftn16gk21t8,crash,2,0,16,8.0,168,128,40,0.312,storm,1,54.9,189,722,0,800,135409,22511.6,500562,0,4.26,0,fail,1.082,unbounded recovery re-triggers: wait 17.3 >= 16.0 ms (B 320)
+v1-pbftn16gk39t6-crash-to2-w2,v1,pbft,pbftn16gk39t6,crash,2,2,16,6.0,234,128,106,0.828,recovered,0,1.0,965,965,0,88,0,3411.09,3570.54,0,4.26,0,ok,0.915,recovers: wait 11.0 < timeout 12.0 ms (B 320)
+v1-pbftn16gk30t6-crash-to2-w2,v1,pbft,pbftn16gk30t6,crash,2,2,16,6.0,180,128,52,0.406,recovered,0,1.0,964,965,0,107,0,3638.85,4579.08,0,4.26,0,ok,1.100,bounded and drained at 52 frames/round
+v1-pbftn10gk15t6-equivocate-to4-w0,v1,pbft,pbftn10gk15t6,equivocate,4,0,10,6.0,90,48,42,0.875,recovered,0,1.0,966,966,0,100,0,3460.93,4494.86,0,4.26,0,ok,0.700,recovers: wait 16.8 < timeout 24.0 ms (B 220)
+v1-pbftn10gk11t6-equivocate-to4-w0,v1,pbft,pbftn10gk11t6,equivocate,4,0,10,6.0,66,48,18,0.375,views,0,3.0,964,966,0,134,0,4426.35,27468.5,0,4.26,0,ok,0.900,recovers: wait 21.6 < timeout 24.0 ms (B 220)
+v1-pbftn10mk6t10-equivocate-to4-w2,v1,pbft,pbftn10mk6t10,equivocate,4,2,10,10.0,60,50,10,0.200,recovered,0,1.0,576,579,3,61,0,7844.66,19837,0,68.58,0,ok,0.677,recovers: wait 27.1 < timeout 40.0 ms (B 130)
+v1-pbftn16gk24t6-crash-to2-w2,v1,pbft,pbftn16gk24t6,crash,2,2,16,6.0,144,128,16,0.125,recovered,0,1.0,964,965,0,155,0,4537.67,5520.8,0,4.26,0,ok,1.300,bounded and drained at 16 frames/round
+v1-pbftn10gk9t6-equivocate-to4-w0,v1,pbft,pbftn10gk9t6,equivocate,4,0,10,6.0,54,48,6,0.125,storm,1,32.5,191,966,0,800,25845,5427.3,379436,0,4.26,0,fail,1.067,unbounded recovery re-triggers: wait 25.6 >= 24.0 ms (B 220)
+v1-hsn10gk4t4-crash-to2,v1,hotstuff,hsn10gk4t4,crash,2,0,10,4.0,16,10,6,0.600,churn,0,46.6,1445,1449,0,800,2585,17436.7,216436,0,4.26,0,ok,0.659,recovers: wait 5.3 < timeout 8.0 ms (B 19)
+v1-hsn10gk3t4-crash-to2,v1,hotstuff,hsn10gk3t4,crash,2,0,10,4.0,12,10,2,0.200,storm,1,50.8,263,1394,0,800,13654,27427.3,470418,0,4.26,0,ok,0.838,recovers: wait 6.7 < timeout 8.0 ms (B 19)
+v1-pbftn10mk7t10-crash-to4-w0,v1,pbft,pbftn10mk7t10,crash,4,0,10,10.0,70,50,20,0.400,recovered,0,1.0,579,579,0,77,0,6936.6,34668.4,0,68.58,0,ok,0.913,recovers: wait 36.5 < timeout 40.0 ms (B 225)
+v1-hsn16gk4t6-crash-to2,v1,hotstuff,hsn16gk4t6,crash,2,0,16,6.0,24,16,8,0.500,churn,0,14.1,963,966,0,61,0,20436.7,49426.4,0,4.26,0,ok,0.665,recovers: wait 8.0 < timeout 12.0 ms (B 31)
+v1-hsn16gk3t6-crash-to2,v1,hotstuff,hsn16gk3t6,crash,2,0,16,6.0,18,16,2,0.125,storm,1,37.9,374,742,0,800,11135,347427,873427,0,4.26,0,ok,0.858,recovers: wait 10.3 < timeout 12.0 ms (B 31)
+v1-pbftn10mk8t10-equivocate-to2-w0,v1,pbft,pbftn10mk8t10,equivocate,2,0,10,10.0,80,50,30,0.600,recovered,0,1.0,579,579,0,73,0,6112.86,14514.9,0,68.58,0,fail,1.111,unbounded recovery re-triggers: wait 22.2 >= 20.0 ms (B 130)
+v1-raftn10gk28t4-crash-to4,v1,raft,raftn10gk28t4,crash,4,0,10,4.0,112,9,103,11.444,recovered,0,0.2,1448,1449,0,385,0,4468.81,937519,0,4.26,0,ok,0.694,recovers: wait 16.7 < timeout 24.0 ms (B 375)
+v1-pbftn10mk6t10-crash-to2-w0,v1,pbft,pbftn10mk6t10,crash,2,0,10,10.0,60,50,10,0.200,storm,1,32.4,119,576,0,800,10341,44591.7,633538,0,68.58,0,fail,1.318,unbounded recovery re-triggers: wait 26.4 >= 20.0 ms (B 125)
+v1-raftn16gk7c4t6-crash-to2,v1,raft,raftn16gk7c4t6,crash,2,0,16,6.0,42,15,27,1.800,recovered,0,0.2,965,966,0,45,0,7445.77,811409,0,4.26,0,ok,0.688,recovers: wait 12.4 < timeout 18.0 ms (B 45)
+v1-raftn10gk20t4-crash-to4,v1,raft,raftn10gk20t4,crash,4,0,10,4.0,80,9,71,7.889,storm,1,24.8,1246,1449,0,800,121423,4493.9,213487,0,4.26,0,ok,0.895,recovers: wait 21.5 < timeout 24.0 ms (B 375)
+v1-raftn16gk4c4t6-crash-to2,v1,raft,raftn16gk4c4t6,crash,2,0,16,6.0,24,15,9,0.600,recovered,0,0.3,965,966,0,45,0,8418.77,811418,0,4.26,0,ok,0.929,recovers: wait 16.7 < timeout 18.0 ms (B 45)
+v1-raftn16gk3c4t6-crash-to2,v1,raft,raftn16gk3c4t6,crash,2,0,16,6.0,18,15,3,0.200,storm,1,88.4,136,958,0,205,0,9417.92,79419.5,0,4.26,0,ok,1.117,bounded and drained at 3 frames/round
+v1-raftn10mk2c2t8-crash-to2,v1,raft,raftn10mk2c2t8,crash,2,0,10,8.0,16,9,7,0.778,recovered,0,0.2,723,724,0,28,0,13584.1,1.22749e+06,0,68.58,0,ok,0.696,recovers: wait 16.7 < timeout 24.0 ms (B 18)
+v1-raftn10gk31t4-crash-to2,v1,raft,raftn10gk31t4,crash,2,0,10,4.0,124,9,115,12.778,churn,0,62.2,1426,1448,0,800,124383,4494.1,177640,0,4.26,0,fail,1.291,unbounded recovery re-triggers: wait 15.5 >= 12.0 ms (B 375)
+v1-raftn10gk39t4-crash-to2,v1,raft,raftn10gk39t4,crash,2,0,10,4.0,156,9,147,16.333,storm,1,63.7,1418,1446,0,800,108832,4494.1,97511.5,0,4.26,0,fail,1.104,unbounded recovery re-triggers: wait 13.3 >= 12.0 ms (B 375)
+v1-hsn10gk2t4-none-to4,v1,hotstuff,hsn10gk2t4,none,4,0,10,4.0,8,10,-2,-0.200,storm,1,16.0,41,1161,0,800,22719,300410,4.45842e+06,0,4.26,0,fail,,C5: 10 > 8
+v1-raftn10mk4t8-crash-to4,v1,raft,raftn10mk4t8,crash,4,0,10,8.0,32,9,23,2.556,storm,1,21.6,294,660,0,800,4494,10530.1,527523,0,68.58,0,fail,1.060,unbounded recovery re-triggers: wait 50.9 >= 48.0 ms (B 188)
+v1-raftn10mk5t8-crash-to4,v1,raft,raftn10mk5t8,crash,4,0,10,8.0,40,9,31,3.444,storm,1,16.3,368,706,0,800,9154,10530.1,540515,0,68.58,0,ok,0.884,recovers: wait 42.4 < timeout 48.0 ms (B 188)
+v1-raftn10mk3t8-crash-to4,v1,raft,raftn10mk3t8,crash,4,0,10,8.0,24,9,15,1.667,storm,1,22.7,295,722,0,800,3410,10683.7,393592,0,68.58,0,fail,1.354,unbounded recovery re-triggers: wait 65.0 >= 48.0 ms (B 188)
+v1-hsn10gk3t4-none-to4,v1,hotstuff,hsn10gk3t4,none,4,0,10,4.0,12,10,2,0.200,recovered,0,0.0,1443,1448,0,19,0,26427.3,32418.8,0,4.26,0,ok,,no trigger: L0 1.0 < timeout 16.0 ms
+v1-hsn10mk1t8-none-to4,v1,hotstuff,hsn10mk1t8,none,4,0,10,8.0,8,10,-2,-0.200,storm,1,13.8,25,480,0,800,6481,185515,583500,0,68.58,0,fail,,C5: 10 > 8
+v1-hsn10mk2t8-none-to4,v1,hotstuff,hsn10mk2t8,none,4,0,10,8.0,16,10,6,0.600,recovered,0,0.0,718,724,0,19,0,43514.9,55545.4,0,68.58,0,ok,,no trigger: L0 1.0 < timeout 32.0 ms
+v1-raftn10gk2t4-none-to4,v1,raft,raftn10gk2t4,none,4,0,10,4.0,8,9,-1,-0.111,storm,1,46.4,708,1335,0,800,7030,352418,753418,0,4.26,0,fail,,C5: 9 > 8
+v1-raftn10gk3t4-none-to4,v1,raft,raftn10gk3t4,none,4,0,10,4.0,12,9,3,0.333,recovered,0,0.0,1448,1449,0,9,0,6410.24,7419.62,0,4.26,0,ok,,no trigger: L0 4.6 < timeout 24.0 ms
+v1-raftn10mk1t8-none-to4,v1,raft,raftn10mk1t8,none,4,0,10,8.0,8,9,-1,-0.111,recovered,0,0.0,570,724,0,732,0,574545,1.22551e+06,0,68.58,0,fail,,C5: 9 > 8
+v1-raftn10mk2t8-none-to4,v1,raft,raftn10mk2t8,none,4,0,10,8.0,16,9,7,0.778,recovered,0,0.0,722,724,0,9,0,20492,23545.4,0,68.58,0,ok,,no trigger: L0 8.6 < timeout 48.0 ms
+v1s-raftn10gk28t4-crash-to4-r3,v1s,raft,raftn10gk28t4,crash,4,0,10,4.0,112,9,103,11.444,recovered,0,0.1,1448,1449,0,385,0,4461.13,937528,0,4.26,0,ok,0.694,recovers: wait 16.7 < timeout 24.0 ms (B 375)
+v1s-raftn10gk28t4-crash-to4-r2,v1s,raft,raftn10gk28t4,crash,4,0,10,4.0,112,9,103,11.444,recovered,0,0.3,1448,1449,0,385,0,4461.13,937528,0,4.26,0,ok,0.694,recovers: wait 16.7 < timeout 24.0 ms (B 375)
+v1s-raftn10gk28t4-crash-to4-r1,v1s,raft,raftn10gk28t4,crash,4,0,10,4.0,112,9,103,11.444,recovered,0,0.2,1448,1449,0,385,0,4468.81,937519,0,4.26,0,ok,0.694,recovers: wait 16.7 < timeout 24.0 ms (B 375)
+v1s-raftn10gk28t4-crash-to4-r4,v1s,raft,raftn10gk28t4,crash,4,0,10,4.0,112,9,103,11.444,recovered,0,0.3,1448,1449,0,390,0,4471.06,957589,0,4.26,0,ok,0.694,recovers: wait 16.7 < timeout 24.0 ms (B 375)
+v1s-raftn10gk28t4-crash-to4-r5,v1s,raft,raftn10gk28t4,crash,4,0,10,4.0,112,9,103,11.444,recovered,0,0.1,1448,1449,0,385,0,4470.31,937538,0,4.26,0,ok,0.694,recovers: wait 16.7 < timeout 24.0 ms (B 375)
+v1s-raftn10gk20t4-crash-to4-r2,v1s,raft,raftn10gk20t4,crash,4,0,10,4.0,80,9,71,7.889,recovered,0,1.2,1448,1449,0,407,0,4461.03,1.03157e+06,0,4.26,0,ok,0.895,recovers: wait 21.5 < timeout 24.0 ms (B 375)
+v1s-raftn10gk20t4-crash-to4-r1,v1s,raft,raftn10gk20t4,crash,4,0,10,4.0,80,9,71,7.889,storm,1,24.8,1246,1449,0,800,121423,4493.9,213487,0,4.26,0,ok,0.895,recovers: wait 21.5 < timeout 24.0 ms (B 375)
+v1s-raftn10gk20t4-crash-to4-r3,v1s,raft,raftn10gk20t4,crash,4,0,10,4.0,80,9,71,7.889,churn,0,25.1,1434,1441,0,800,134245,4494.1,217488,0,4.26,0,ok,0.895,recovers: wait 21.5 < timeout 24.0 ms (B 375)
+v1s-raftn10gk20t4-crash-to4-r5,v1s,raft,raftn10gk20t4,crash,4,0,10,4.0,80,9,71,7.889,churn+delay,0,28.4,1448,1449,0,800,111052,8427.2,211412,0,4.26,0,ok,0.895,recovers: wait 21.5 < timeout 24.0 ms (B 375)
+v1s-raftn10gk20t4-crash-to4-r4,v1s,raft,raftn10gk20t4,crash,4,0,10,4.0,80,9,71,7.889,storm,1,21.7,1381,1443,0,800,184249,4493.9,128486,0,4.26,0,ok,0.895,recovers: wait 21.5 < timeout 24.0 ms (B 375)
+v1s-raftn10gk39t4-crash-to2-r1,v1s,raft,raftn10gk39t4,crash,2,0,10,4.0,156,9,147,16.333,storm,1,63.7,1418,1446,0,800,108832,4494.1,97511.5,0,4.26,0,fail,1.104,unbounded recovery re-triggers: wait 13.3 >= 12.0 ms (B 375)
+v1s-raftn10gk39t4-crash-to2-r2,v1s,raft,raftn10gk39t4,crash,2,0,10,4.0,156,9,147,16.333,churn,0,62.3,1419,1449,0,800,142071,4493.9,120461,0,4.26,0,fail,1.104,unbounded recovery re-triggers: wait 13.3 >= 12.0 ms (B 375)
+v1s-raftn10gk39t4-crash-to2-r3,v1s,raft,raftn10gk39t4,crash,2,0,10,4.0,156,9,147,16.333,churn,0,57.7,1446,1449,0,800,105208,4494.1,535698,0,4.26,0,fail,1.104,unbounded recovery re-triggers: wait 13.3 >= 12.0 ms (B 375)
+v1s-raftn10gk39t4-crash-to2-r4,v1s,raft,raftn10gk39t4,crash,2,0,10,4.0,156,9,147,16.333,churn,0,59.4,1443,1449,0,800,154316,4494.1,80471.1,0,4.26,0,fail,1.104,unbounded recovery re-triggers: wait 13.3 >= 12.0 ms (B 375)
+v1s-raftn10gk31t4-crash-to2-r1,v1s,raft,raftn10gk31t4,crash,2,0,10,4.0,124,9,115,12.778,churn,0,62.2,1426,1448,0,800,124383,4494.1,177640,0,4.26,0,fail,1.291,unbounded recovery re-triggers: wait 15.5 >= 12.0 ms (B 375)
+v1s-raftn10gk39t4-crash-to2-r5,v1s,raft,raftn10gk39t4,crash,2,0,10,4.0,156,9,147,16.333,churn,0,58.4,1448,1449,0,800,165480,4495.71,136495,0,4.26,0,fail,1.104,unbounded recovery re-triggers: wait 13.3 >= 12.0 ms (B 375)
+v1s-raftn10gk31t4-crash-to2-r2,v1s,raft,raftn10gk31t4,crash,2,0,10,4.0,124,9,115,12.778,churn,0,64.1,1420,1449,0,800,110932,4494.1,328486,0,4.26,0,fail,1.291,unbounded recovery re-triggers: wait 15.5 >= 12.0 ms (B 375)
+v1s-raftn10gk31t4-crash-to2-r3,v1s,raft,raftn10gk31t4,crash,2,0,10,4.0,124,9,115,12.778,churn,0,62.4,1434,1449,0,800,101126,4494.1,143589,0,4.26,0,fail,1.291,unbounded recovery re-triggers: wait 15.5 >= 12.0 ms (B 375)
+v1s-raftn16gk7c4t6-crash-to2-r1,v1s,raft,raftn16gk7c4t6,crash,2,0,16,6.0,42,15,27,1.800,recovered,0,0.2,965,966,0,45,0,7445.77,811409,0,4.26,0,ok,0.688,recovers: wait 12.4 < timeout 18.0 ms (B 45)
+v1s-raftn16gk7c4t6-crash-to2-r2,v1s,raft,raftn16gk7c4t6,crash,2,0,16,6.0,42,15,27,1.800,recovered,0,0.2,965,966,0,38,0,7436.48,810462,0,4.26,0,ok,0.688,recovers: wait 12.4 < timeout 18.0 ms (B 45)
+v1s-raftn16gk7c4t6-crash-to2-r3,v1s,raft,raftn16gk7c4t6,crash,2,0,16,6.0,42,15,27,1.800,recovered,0,0.1,965,966,0,38,0,7436.48,810462,0,4.26,0,ok,0.688,recovers: wait 12.4 < timeout 18.0 ms (B 45)
+v1s-raftn16gk7c4t6-crash-to2-r4,v1s,raft,raftn16gk7c4t6,crash,2,0,16,6.0,42,15,27,1.800,recovered,0,0.2,965,966,0,75,0,7436.48,810462,0,4.26,0,ok,0.688,recovers: wait 12.4 < timeout 18.0 ms (B 45)
+v1s-raftn16gk7c4t6-crash-to2-r5,v1s,raft,raftn16gk7c4t6,crash,2,0,16,6.0,42,15,27,1.800,recovered,0,0.2,965,966,0,45,0,7427.3,810453,0,4.26,0,ok,0.688,recovers: wait 12.4 < timeout 18.0 ms (B 45)
+v1s-raftn10gk31t4-crash-to2-r4,v1s,raft,raftn10gk31t4,crash,2,0,10,4.0,124,9,115,12.778,churn,0,61.9,1431,1446,0,800,92486,4494.1,221462,0,4.26,0,fail,1.291,unbounded recovery re-triggers: wait 15.5 >= 12.0 ms (B 375)
+v1s-raftn16gk4c4t6-crash-to2-r1,v1s,raft,raftn16gk4c4t6,crash,2,0,16,6.0,24,15,9,0.600,recovered,0,0.3,965,966,0,45,0,8418.77,811418,0,4.26,0,ok,0.929,recovers: wait 16.7 < timeout 18.0 ms (B 45)
+v1s-raftn10gk31t4-crash-to2-r5,v1s,raft,raftn10gk31t4,crash,2,0,10,4.0,124,9,115,12.778,churn,0,63.5,1432,1449,0,800,97372,4495.71,336438,0,4.26,0,fail,1.291,unbounded recovery re-triggers: wait 15.5 >= 12.0 ms (B 375)
+v1s-raftn16gk4c4t6-crash-to2-r2,v1s,raft,raftn16gk4c4t6,crash,2,0,16,6.0,24,15,9,0.600,recovered,0,0.3,965,966,0,45,0,8427.3,811427,0,4.26,0,ok,0.929,recovers: wait 16.7 < timeout 18.0 ms (B 45)
+v1s-raftn16gk4c4t6-crash-to2-r3,v1s,raft,raftn16gk4c4t6,crash,2,0,16,6.0,24,15,9,0.600,recovered,0,0.2,965,966,0,45,0,8427.3,811427,0,4.26,0,ok,0.929,recovers: wait 16.7 < timeout 18.0 ms (B 45)
+v1s-raftn16gk4c4t6-crash-to2-r5,v1s,raft,raftn16gk4c4t6,crash,2,0,16,6.0,24,15,9,0.600,recovered,0,0.2,965,966,0,45,0,8418.77,811418,0,4.26,0,ok,0.929,recovers: wait 16.7 < timeout 18.0 ms (B 45)
+v1s-raftn16gk4c4t6-crash-to2-r4,v1s,raft,raftn16gk4c4t6,crash,2,0,16,6.0,24,15,9,0.600,storm,1,65.3,149,965,0,220,0,8426.45,2.15643e+06,0,4.26,0,ok,0.929,recovers: wait 16.7 < timeout 18.0 ms (B 45)
+v1s-raftn16gk3c4t6-crash-to2-r1,v1s,raft,raftn16gk3c4t6,crash,2,0,16,6.0,18,15,3,0.200,storm,1,88.4,136,958,0,205,0,9417.92,79419.5,0,4.26,0,ok,1.117,bounded and drained at 3 frames/round
+v1s-raftn16gk3c4t6-crash-to2-r2,v1s,raft,raftn16gk3c4t6,crash,2,0,16,6.0,18,15,3,0.200,storm,1,94.7,136,961,0,205,0,9417.92,352410,0,4.26,0,ok,1.117,bounded and drained at 3 frames/round
+v1s-raftn16gk3c4t6-crash-to2-r3,v1s,raft,raftn16gk3c4t6,crash,2,0,16,6.0,18,15,3,0.200,storm,1,91.9,136,952,0,204,0,9417.92,1.52642e+06,0,4.26,0,ok,1.117,bounded and drained at 3 frames/round
+v1s-raftn16gk3c4t6-crash-to2-r4,v1s,raft,raftn16gk3c4t6,crash,2,0,16,6.0,18,15,3,0.200,storm,1,95.8,132,956,0,204,0,8426.45,12411.9,0,4.26,0,ok,1.117,bounded and drained at 3 frames/round
+v1s-raftn10mk2c2t8-crash-to2-r1,v1s,raft,raftn10mk2c2t8,crash,2,0,10,8.0,16,9,7,0.778,recovered,0,0.2,723,724,0,28,0,13584.1,1.22749e+06,0,68.58,0,ok,0.696,recovers: wait 16.7 < timeout 24.0 ms (B 18)
+v1s-raftn16gk3c4t6-crash-to2-r5,v1s,raft,raftn16gk3c4t6,crash,2,0,16,6.0,18,15,3,0.200,storm,1,88.3,140,966,0,204,0,9417.92,2.13843e+06,0,4.26,0,ok,1.117,bounded and drained at 3 frames/round
+v1s-raftn10mk2c2t8-crash-to2-r2,v1s,raft,raftn10mk2c2t8,crash,2,0,10,8.0,16,9,7,0.778,recovered,0,1.5,723,724,0,40,0,13614.6,1.22649e+06,0,68.58,0,ok,0.696,recovers: wait 16.7 < timeout 24.0 ms (B 18)
+v1s-raftn10mk2c2t8-crash-to2-r3,v1s,raft,raftn10mk2c2t8,crash,2,0,10,8.0,16,9,7,0.778,recovered,0,0.3,723,724,0,28,0,19499.7,1.22849e+06,0,68.58,0,ok,0.696,recovers: wait 16.7 < timeout 24.0 ms (B 18)
+v1s-raftn10mk2c2t8-crash-to2-r4,v1s,raft,raftn10mk2c2t8,crash,2,0,10,8.0,16,9,7,0.778,recovered,0,0.3,723,724,0,26,0,13584.1,1.22749e+06,0,68.58,0,ok,0.696,recovers: wait 16.7 < timeout 24.0 ms (B 18)
+v1s-raftn10mk2c2t8-crash-to2-r5,v1s,raft,raftn10mk2c2t8,crash,2,0,10,8.0,16,9,7,0.778,recovered,0,0.7,723,724,0,28,0,16576.5,1.23849e+06,0,68.58,0,ok,0.696,recovers: wait 16.7 < timeout 24.0 ms (B 18)
+v1s-raftn10mk5t8-crash-to4-r2,v1s,raft,raftn10mk5t8,crash,4,0,10,8.0,40,9,31,3.444,recovered,0,0.7,723,724,0,198,0,9760.44,966661,0,68.58,0,ok,0.884,recovers: wait 42.4 < timeout 48.0 ms (B 188)
+v1s-raftn10mk5t8-crash-to4-r1,v1s,raft,raftn10mk5t8,crash,4,0,10,8.0,40,9,31,3.444,storm,1,16.3,368,706,0,800,9154,10530.1,540515,0,68.58,0,ok,0.884,recovers: wait 42.4 < timeout 48.0 ms (B 188)
+v1s-raftn10mk5t8-crash-to4-r3,v1s,raft,raftn10mk5t8,crash,4,0,10,8.0,40,9,31,3.444,storm,1,15.6,591,712,0,800,6668,10860.1,863745,0,68.58,0,ok,0.884,recovers: wait 42.4 < timeout 48.0 ms (B 188)
+v1s-raftn10mk5t8-crash-to4-r4,v1s,raft,raftn10mk5t8,crash,4,0,10,8.0,40,9,31,3.444,storm,1,17.4,293,691,0,800,6444,9768.06,88775.7,0,68.58,0,ok,0.884,recovers: wait 42.4 < timeout 48.0 ms (B 188)
+v1s-raftn10mk5t8-crash-to4-r5,v1s,raft,raftn10mk5t8,crash,4,0,10,8.0,40,9,31,3.444,storm,1,16.2,369,702,0,800,13979,9760.44,596845,0,68.58,0,ok,0.884,recovers: wait 42.4 < timeout 48.0 ms (B 188)
+v1s-raftn10mk4t8-crash-to4-r1,v1s,raft,raftn10mk4t8,crash,4,0,10,8.0,32,9,23,2.556,storm,1,21.6,294,660,0,800,4494,10530.1,527523,0,68.58,0,fail,1.060,unbounded recovery re-triggers: wait 50.9 >= 48.0 ms (B 188)
+v1s-raftn10mk4t8-crash-to4-r2,v1s,raft,raftn10mk4t8,crash,4,0,10,8.0,32,9,23,2.556,storm,1,20.8,299,707,0,800,7476,10522.5,648584,0,68.58,0,fail,1.060,unbounded recovery re-triggers: wait 50.9 >= 48.0 ms (B 188)
+v1s-raftn10mk4t8-crash-to4-r3,v1s,raft,raftn10mk4t8,crash,4,0,10,8.0,32,9,23,2.556,storm,1,20.1,311,706,0,800,2018,10522.5,161783,0,68.58,0,fail,1.060,unbounded recovery re-triggers: wait 50.9 >= 48.0 ms (B 188)
+v1s-raftn10mk4t8-crash-to4-r4,v1s,raft,raftn10mk4t8,crash,4,0,10,8.0,32,9,23,2.556,storm,1,21.1,293,718,0,800,6853,10530.1,168668,0,68.58,0,fail,1.060,unbounded recovery re-triggers: wait 50.9 >= 48.0 ms (B 188)
+v1s-raftn10mk4t8-crash-to4-r5,v1s,raft,raftn10mk4t8,crash,4,0,10,8.0,32,9,23,2.556,storm,1,18.9,359,713,0,800,9776,10522.5,458714,0,68.58,0,fail,1.060,unbounded recovery re-triggers: wait 50.9 >= 48.0 ms (B 188)
+v1s-raftn10mk3t8-crash-to4-r1,v1s,raft,raftn10mk3t8,crash,4,0,10,8.0,24,9,15,1.667,storm,1,22.7,295,722,0,800,3410,10683.7,393592,0,68.58,0,fail,1.354,unbounded recovery re-triggers: wait 65.0 >= 48.0 ms (B 188)
+v1s-raftn10mk3t8-crash-to4-r2,v1s,raft,raftn10mk3t8,crash,4,0,10,8.0,24,9,15,1.667,storm,1,21.3,294,723,0,800,5484,10676.1,781699,0,68.58,0,fail,1.354,unbounded recovery re-triggers: wait 65.0 >= 48.0 ms (B 188)
+v1s-raftn10mk3t8-crash-to4-r3,v1s,raft,raftn10mk3t8,crash,4,0,10,8.0,24,9,15,1.667,storm,1,21.3,303,694,0,800,4644,10676.1,146691,0,68.58,0,fail,1.354,unbounded recovery re-triggers: wait 65.0 >= 48.0 ms (B 188)
+v1s-raftn10mk3t8-crash-to4-r4,v1s,raft,raftn10mk3t8,crash,4,0,10,8.0,24,9,15,1.667,storm,1,23.2,288,692,0,800,1901,10683.7,70614.6,0,68.58,0,fail,1.354,unbounded recovery re-triggers: wait 65.0 >= 48.0 ms (B 188)
+v1s-raftn10gk2t4-none-to4-r1,v1s,raft,raftn10gk2t4,none,4,0,10,4.0,8,9,-1,-0.111,storm,1,46.4,708,1335,0,800,7030,352418,753418,0,4.26,0,fail,,C5: 9 > 8
+v1s-raftn10mk3t8-crash-to4-r5,v1s,raft,raftn10mk3t8,crash,4,0,10,8.0,24,9,15,1.667,storm,1,22.8,303,719,0,800,2735,11499.7,457538,0,68.58,0,fail,1.354,unbounded recovery re-triggers: wait 65.0 >= 48.0 ms (B 188)
+v1s-raftn10gk2t4-none-to4-r3,v1s,raft,raftn10gk2t4,none,4,0,10,4.0,8,9,-1,-0.111,storm,1,44.8,709,1429,0,800,6279,352419,754418,0,4.26,0,fail,,C5: 9 > 8
+v1s-raftn10gk2t4-none-to4-r2,v1s,raft,raftn10gk2t4,none,4,0,10,4.0,8,9,-1,-0.111,storm,1,45.4,709,1416,0,800,11599,352419,754418,0,4.26,0,fail,,C5: 9 > 8
+v1s-raftn10gk2t4-none-to4-r4,v1s,raft,raftn10gk2t4,none,4,0,10,4.0,8,9,-1,-0.111,storm,1,45.8,709,1356,0,800,9239,352419,754418,0,4.26,0,fail,,C5: 9 > 8
+v1s-raftn10gk2t4-none-to4-r5,v1s,raft,raftn10gk2t4,none,4,0,10,4.0,8,9,-1,-0.111,storm,1,46.4,707,1438,0,800,9552,352411,753409,0,4.26,0,fail,,C5: 9 > 8
+v1s-raftn10gk3t4-none-to4-r1,v1s,raft,raftn10gk3t4,none,4,0,10,4.0,12,9,3,0.333,recovered,0,0.0,1448,1449,0,9,0,6410.24,7419.62,0,4.26,0,ok,,no trigger: L0 4.6 < timeout 24.0 ms
+v1s-raftn10gk3t4-none-to4-r2,v1s,raft,raftn10gk3t4,none,4,0,10,4.0,12,9,3,0.333,recovered,0,0.0,1448,1449,0,9,0,6410.24,7419.62,0,4.26,0,ok,,no trigger: L0 4.6 < timeout 24.0 ms
+v1s-raftn10gk3t4-none-to4-r3,v1s,raft,raftn10gk3t4,none,4,0,10,4.0,12,9,3,0.333,recovered,0,0.0,1448,1449,0,9,0,6410.24,7419.62,0,4.26,0,ok,,no trigger: L0 4.6 < timeout 24.0 ms
+v1s-raftn10gk3t4-none-to4-r4,v1s,raft,raftn10gk3t4,none,4,0,10,4.0,12,9,3,0.333,recovered,0,0.0,1448,1449,0,9,0,6410.24,7419.62,0,4.26,0,ok,,no trigger: L0 4.6 < timeout 24.0 ms
+v1s-raftn10gk3t4-none-to4-r5,v1s,raft,raftn10gk3t4,none,4,0,10,4.0,12,9,3,0.333,recovered,0,0.0,1448,1449,0,9,0,6410.24,7419.62,0,4.26,0,ok,,no trigger: L0 4.6 < timeout 24.0 ms
+v1s-raftn10mk1t8-none-to4-r1,v1s,raft,raftn10mk1t8,none,4,0,10,8.0,8,9,-1,-0.111,recovered,0,0.0,570,724,0,732,0,574545,1.22551e+06,0,68.58,0,fail,,C5: 9 > 8
+v1s-raftn10mk1t8-none-to4-r2,v1s,raft,raftn10mk1t8,none,4,0,10,8.0,8,9,-1,-0.111,recovered,0,0.0,570,724,0,732,0,574545,1.22551e+06,0,68.58,0,fail,,C5: 9 > 8
+v1s-raftn10mk1t8-none-to4-r3,v1s,raft,raftn10mk1t8,none,4,0,10,8.0,8,9,-1,-0.111,recovered,0,0.0,570,724,0,732,0,574545,1.22551e+06,0,68.58,0,fail,,C5: 9 > 8
+v1s-raftn10mk1t8-none-to4-r4,v1s,raft,raftn10mk1t8,none,4,0,10,8.0,8,9,-1,-0.111,recovered,0,0.0,570,724,0,732,0,574545,1.22551e+06,0,68.58,0,fail,,C5: 9 > 8
+v1s-raftn10mk1t8-none-to4-r5,v1s,raft,raftn10mk1t8,none,4,0,10,8.0,8,9,-1,-0.111,recovered,0,0.0,570,724,0,732,0,574545,1.22551e+06,0,68.58,0,fail,,C5: 9 > 8
+v1s-raftn10mk2t8-none-to4-r1,v1s,raft,raftn10mk2t8,none,4,0,10,8.0,16,9,7,0.778,recovered,0,0.0,722,724,0,9,0,20492,23545.4,0,68.58,0,ok,,no trigger: L0 8.6 < timeout 48.0 ms
+v1s-raftn10mk2t8-none-to4-r2,v1s,raft,raftn10mk2t8,none,4,0,10,8.0,16,9,7,0.778,recovered,0,0.0,722,724,0,9,0,20492,23545.4,0,68.58,0,ok,,no trigger: L0 8.6 < timeout 48.0 ms
+v1s-raftn10mk2t8-none-to4-r3,v1s,raft,raftn10mk2t8,none,4,0,10,8.0,16,9,7,0.778,recovered,0,0.0,722,724,0,9,0,20492,23545.4,0,68.58,0,ok,,no trigger: L0 8.6 < timeout 48.0 ms
+v1s-raftn10mk2t8-none-to4-r4,v1s,raft,raftn10mk2t8,none,4,0,10,8.0,16,9,7,0.778,recovered,0,0.0,722,724,0,9,0,20492,23545.4,0,68.58,0,ok,,no trigger: L0 8.6 < timeout 48.0 ms
+v1s-raftn10mk2t8-none-to4-r5,v1s,raft,raftn10mk2t8,none,4,0,10,8.0,16,9,7,0.778,recovered,0,0.0,722,724,0,9,0,20492,23545.4,0,68.58,0,ok,,no trigger: L0 8.6 < timeout 48.0 ms

@@ -72,3 +72,12 @@ Captures and run logs are now byte-identical across machines. No result changes:
 - Oracle trusts crash-only nodes (crash-recovery model).
 - Fixed: `--attack=inject` crashed (injectors were built before the attack was parsed).
 - New option `--reproposeWindow` (default 0, behaviour unchanged).
+- View-change escalation (Castro-Liskov): a node whose request gets no NEW-VIEW within the timeout asks for the next view and doubles the timeout. Without it a lost VIEW-CHANGE or NEW-VIEW stopped the node for good. The report counts escalations and nodes at the view cap.
+- Report sections "queues" (consensus peak per port, drops per class) and "agreement" (the oracle's figures in a run without an attack), both only in `full` runs or under an attack, so `v1` logs are unchanged.
+- `--protocol=hotstuff|raft`: chained HotStuff and Raft as traffic models on the same round clock, adversary hooks and oracle. A message carrying k rounds of payload is sent as k frames. Raft refuses `--attack=equivocate`; a crashed Raft leader restarts as a follower. `--raftCatchup` limits entries per follower per tick.
+- Tools: `fault_sweep.sh` (sets `f1`-`f5`, `p1`-`p3`, `v1`, `v1s`), `vc_budget.py`, `fault_report.py`, `fault_timeline.py`, `headroom.py`, `protocol_check.sh`, `recovery_rule.py`, `validation_design.py`, `seed_study.py`, `assemble_results.py`.
+- Registered validation set `tools/validation/v1_cells.csv` (40 cells, predictions at beta 0.9, SHA-256 `0b1d7df59c06a451ced87a095ffb77dcb8025abcb3c17daab38bc3b4b8fcf57f`), committed before its runs.
+- Raft logs say "a majority of trusted nodes" for the quorum (the count was always a majority; the label said 2f+1).
+- `tools/verify_paper2.sh`: rebuilds the stack, checks the registered predictions' hash and the sweep's cell list against the reference, runs `adversary_check.sh` and `protocol_check.sh`, the full fault sweep (333 cells), `assemble_results.py`, and compares with `tools/reference/paper2/` through `tools/compare_paper2.py` (isolation and safety, outcomes and rule predictions, every cell value and every table). Resumable, `-j N`, `--quick`, `--sets`, `--check-only`; packs `paper2-repro-results.tar.gz`. `tools/verify_reproducibility.sh` is unchanged.
+- `tools/reference/paper2/`: `all_cells.csv` and the five table CSVs of the authors' run (ns-3.49, TAS module `3d00954`); no figures.
+- `tools/compare_reference.py`, run without set names, lists only first-paper sets, so it skips `reference/paper2/`.

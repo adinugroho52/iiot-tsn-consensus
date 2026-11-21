@@ -1,0 +1,5 @@
+Config,Spare,to2/w0,to2/w2,to2/w1,to4/w0,to4/w2,to4/w1,to8/w0,to8/w2,to8/w1
+w275t4,0,S,S,R+,S,R+,R+,S,R+,R+
+w300t4,12,S,R,R,S,R,R,S,R,R
+w300t6,82,R,R,R,R,R,R,R,R,R
+100mt8,6,S,S,R,S,R,R,S,R,R

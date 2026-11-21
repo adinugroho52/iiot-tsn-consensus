@@ -1,0 +1,9 @@
+Trigger,n,M,Largest spare that stormed,Smallest spare that recovered,Monotonic
+crash,7,24,17%,33%,yes
+crash,10,48,17%,25%,yes
+crash,13,84,14%,24%,yes
+crash,16,128,22%,25%,yes
+equivocate,7,24,33%,50%,yes
+equivocate,10,48,33%,42%,yes
+equivocate,13,84,24%,33%,yes
+equivocate,16,128,31%,41%,yes
