@@ -40,11 +40,11 @@
 #   p1  protocols, no fault (13 cells): PBFT, chained HotStuff and Raft at n = 16
 #       (E15's 1 Gbps network, 4 ms rounds) with the consensus window cut to
 #       around each protocol's own load: the smallest window each needs.
-#   p2  protocols under faults (27 cells): HotStuff and Raft at 0-100% spare
-#       capacity over their own load, under the triggers of f1-f4.
-#   p3  (32 cells) what p2 could not show: HotStuff from 0 to 100% spare over its
-#       worst round (16 frames, which binds; p1), and Raft with its catch-up
-#       limited to 2 or 4 entries per follower per tick (etcd-style flow control).
+#   p2  protocols under faults (55 cells): chained HotStuff with its window at
+#       8 to 32 frames per round (-50% to +100% spare over its worst round, 16
+#       frames, which binds; p1), and Raft at 16 to 24 frames (7-60% spare over
+#       its 15), under the triggers of f1-f4; Raft also with its catch-up limited
+#       to 2 or 4 entries per follower per tick (etcd-style flow control).
 #   v1  validation (40 cells): configurations no earlier set used, with the
 #       recovery rule's predictions registered in tools/validation/v1_cells.csv
 #       before the runs (tools/validation_design.py). Only run by name.
@@ -65,11 +65,11 @@ while [[ $# -gt 0 ]]; do
     -j) JOBS="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
     -h|--help) sed -n '2,36p' "$0"; exit 0 ;;
-    f1|f2|f3|f4|f5|p1|p2|p3|v1|v1s) SETS+=("$1"); shift ;;
-    *) echo "unknown argument: $1 (sets are f1 f2 f3 f4 f5 p1 p2 p3 v1 v1s)" >&2; exit 2 ;;
+    f1|f2|f3|f4|f5|p1|p2|v1|v1s) SETS+=("$1"); shift ;;
+    *) echo "unknown argument: $1 (sets are f1 f2 f3 f4 f5 p1 p2 v1 v1s)" >&2; exit 2 ;;
   esac
 done
-[[ ${#SETS[@]} -eq 0 ]] && SETS=(f1 f2 f3 f4 f5 p1 p2 p3)   # v1 only by name
+[[ ${#SETS[@]} -eq 0 ]] && SETS=(f1 f2 f3 f4 f5 p1 p2)   # v1 only by name
 wants() { local s; for s in "${SETS[@]}"; do [[ "$s" == "$1" ]] && return 0; done; return 1; }
 
 LOG="$OUT/log"; CSV="$OUT/csv"; SUMMARY="$OUT/summary.csv"
@@ -308,37 +308,30 @@ if wants p1; then
   wait
 fi
 
+# p2. HotStuff: C = 8 to 32 (k = 2..8) is -50% to +100% spare over its worst
+# round. A no-fault run at a short timeout (half a round) checks whether the
+# timeout alone starts a storm where the window is tight (k <= 4).
+# Raft: C = 16, 20, 24 over a load of 15, with unlimited catch-up and with a
+# follower that fell behind given at most L entries per tick; the leader's
+# uplink then carries 15 + (L - 1) frames per round while it catches up, which
+# fits C = 16 at L = 2 and C = 20 at L <= 6.
 if wants p2; then
   echo "== p2: protocols under faults"
-  for proto in hotstuff raft; do
-    if [[ $proto == hotstuff ]]; then ks="2 3 4"; else ks="4 5 6"; fi
-    for k in $ks; do
-      pcell p2 "$proto" "$k" crash 4 "--attack=crash $WIN" "--crash 0"
-      pcell p2 "$proto" "$k" crash 2 "--attack=crash $WIN" "--crash 0"
-      pcell p2 "$proto" "$k" none 0.5 "" ""
-      pcell p2 "$proto" "$k" flood2 - "--attack=flood --byzSelect=last --floodFactor=2 $WIN" ""
-      [[ $proto == hotstuff ]] && pcell p2 "$proto" "$k" equivocate - "--attack=equivocate $WIN" "--crash="
-    done
-  done
-  wait
-fi
-
-# p3. HotStuff: C = 16, 20, 24, 28, 32 = 0, 25, 50, 75, 100% spare over its worst
-# round. Raft: a follower that fell behind gets at most L entries per tick; the
-# leader's uplink then carries 15 + (L - 1) frames per round while it catches
-# up, which fits C = 16 at L = 2 and C = 20 at L <= 6.
-if wants p3; then
-  echo "== p3: HotStuff headroom, Raft catch-up limit"
-  for k in 4 5 6 7 8; do
-    pcell p3 hotstuff "$k" crash 4 "--attack=crash $WIN" "--crash 0"
-    pcell p3 hotstuff "$k" crash 2 "--attack=crash $WIN" "--crash 0"
-    pcell p3 hotstuff "$k" equivocate - "--attack=equivocate $WIN" "--crash="
-    pcell p3 hotstuff "$k" flood2 - "--attack=flood --byzSelect=last --floodFactor=2 $WIN" ""
+  for k in 2 3 4 5 6 7 8; do
+    pcell p2 hotstuff "$k" crash 4 "--attack=crash $WIN" "--crash 0"
+    pcell p2 hotstuff "$k" crash 2 "--attack=crash $WIN" "--crash 0"
+    [[ $k -le 4 ]] && pcell p2 hotstuff "$k" none 0.5 "" ""
+    pcell p2 hotstuff "$k" flood2 - "--attack=flood --byzSelect=last --floodFactor=2 $WIN" ""
+    pcell p2 hotstuff "$k" equivocate - "--attack=equivocate $WIN" "--crash="
   done
   for k in 4 5 6; do
+    pcell p2 raft "$k" crash 4 "--attack=crash $WIN" "--crash 0"
+    pcell p2 raft "$k" crash 2 "--attack=crash $WIN" "--crash 0"
+    pcell p2 raft "$k" none 0.5 "" ""
+    pcell p2 raft "$k" flood2 - "--attack=flood --byzSelect=last --floodFactor=2 $WIN" ""
     for L in 2 4; do
-      pcell p3 raft "$k" crash 4 "--attack=crash $WIN --raftCatchup=$L" "--crash 0" "c$L"
-      pcell p3 raft "$k" crash 2 "--attack=crash $WIN --raftCatchup=$L" "--crash 0" "c$L"
+      pcell p2 raft "$k" crash 4 "--attack=crash $WIN --raftCatchup=$L" "--crash 0" "c$L"
+      pcell p2 raft "$k" crash 2 "--attack=crash $WIN --raftCatchup=$L" "--crash 0" "c$L"
     done
   done
   wait

@@ -5,7 +5,7 @@ industrial networks" (Nugroho and Sari).
 
 These files are the reference that `tools/verify_paper2.sh` checks a fresh run
 against. They were written by `tools/assemble_results.py` from the authors' run
-of every set (`tools/fault_sweep.sh f1 f2 f3 f4 f5 p1 p2 p3 v1 v1s`, 333 cells)
+of every set (`tools/fault_sweep.sh f1 f2 f3 f4 f5 p1 p2 v1 v1s`, 329 cells)
 built with:
 
 - ns-3.49
@@ -15,9 +15,9 @@ built with:
 
 | File | Contents |
 |---|---|
-| `all_cells.csv` | one row per cell (333): parameters, outcome, recovery-rule prediction, key figures |
+| `all_cells.csv` | one row per cell (329): parameters, outcome, recovery-rule prediction, key figures |
 | `table_protocols.csv` | Table: protocols at their smallest window (p1) |
-| `table_headroom.csv` | Table: headroom needed per trigger (f4, f5, p2, p3) |
+| `table_headroom.csv` | Table: headroom needed per trigger (f4, f5) |
 | `table_f1grid.csv` | Table: the crashed-primary grid (f1) |
 | `table_rule.csv` | Table: recovery-rule scores, including the registered validation (v1, v1s) |
 | `table_control.csv` | Table: control-loop isolation per set |

@@ -58,8 +58,7 @@ Run from the ns-3 root; results go to `results_fault/` (`summary.csv`, `log/`,
 | f4 | 36 | headroom at n = 16: consensus window 300-440 µs under four triggers |
 | f5 | 38 | headroom at n = 7, 10, 13 |
 | p1 | 13 | PBFT, HotStuff, Raft with the window cut to each protocol's load |
-| p2 | 27 | HotStuff and Raft under faults |
-| p3 | 32 | HotStuff headroom over its worst round; Raft catch-up limit |
+| p2 | 55 | HotStuff and Raft under faults: -50% to +100% spare, Raft catch-up limit |
 | v1 | 40 | registered validation (run by name) |
 | v1s | 75 | the 15 Raft cells of v1 under seeds 1-5 (run by name) |
 
@@ -108,10 +107,10 @@ repository (`.gitignore` excludes `results_*/`).
 
 `tools/verify_paper2.sh` rebuilds the stack from scratch (ns-3.49, TAS module at
 commit `3d00954`), runs both scenario checks (`adversary_check.sh`, 30 checks;
-`protocol_check.sh`, 29), the full sweep of 333 cells, `assemble_results.py`, and
+`protocol_check.sh`, 29), the full sweep of 329 cells, `assemble_results.py`, and
 compares the result with `tools/reference/paper2/`:
 
-    tools/verify_paper2.sh -j 4              # all 333 cells, about 7 h on one core
+    tools/verify_paper2.sh -j 4              # all 329 cells, about 7 h on one core
     tools/verify_paper2.sh --quick           # f1, p1 and v1 only (89 cells, cells only)
     tools/verify_paper2.sh --check-only      # assemble and compare an earlier run again
 

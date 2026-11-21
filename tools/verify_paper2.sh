@@ -17,7 +17,7 @@
 #   3. copies this repository into the ns-3 tree, configures and builds;
 #   4. runs the scenario checks: tools/adversary_check.sh (30 PBFT checks) and
 #      tools/protocol_check.sh (29 HotStuff and Raft checks);
-#   5. runs the sweep, tools/fault_sweep.sh, over the chosen sets (333 cells for
+#   5. runs the sweep, tools/fault_sweep.sh, over the chosen sets (329 cells for
 #      the full paper, about 7 h on one core; -j N runs N cells at a time);
 #   6. assembles every table and figure with tools/assemble_results.py;
 #   7. compares with the reference (tools/compare_paper2.py): control isolation
@@ -40,7 +40,7 @@
 #   --tas-src DIR     use an existing TAS clone instead of cloning one
 #   --profile P       ns-3 build profile (default: ns-3's own default)
 #   -j N              cells run in parallel by the sweep (default 1)
-#   --sets "S ..."    run only these sets (default: f1 f2 f3 f4 f5 p1 p2 p3 v1 v1s);
+#   --sets "S ..."    run only these sets (default: f1 f2 f3 f4 f5 p1 p2 v1 v1s);
 #                     a partial run checks cells only, not the tables
 #   --quick           the same as --sets "f1 p1 v1": 89 cells, about 2 h serially
 #   --skip-checks     skip step 4 (the scenario checks, about 15 min)
@@ -66,7 +66,7 @@ PROFILE=""
 WORK=""
 REPO=""
 JOBS=1
-ALL_SETS="f1 f2 f3 f4 f5 p1 p2 p3 v1 v1s"
+ALL_SETS="f1 f2 f3 f4 f5 p1 p2 v1 v1s"
 SETS_ARG="$ALL_SETS"
 SKIP_CHECKS=0
 CHECK_ONLY=0

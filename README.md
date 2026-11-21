@@ -140,7 +140,7 @@ and a record of the environment, for sharing a run. `tools/compare_reference.py 
 compares any results folder laid out the same way. `--tas-src`, `--tas-commit`, `--ns3-tag` and `--profile` change the
 build; with a different version, expect differences to show up in the comparison.
 
-The second paper has its own script, `tools/verify_paper2.sh` (333 fault cells, about 7 h on one core, `-j N` to run
+The second paper has its own script, `tools/verify_paper2.sh` (329 fault cells, about 7 h on one core, `-j N` to run
 in parallel; `--quick` for f1, p1 and v1), checked against `tools/reference/paper2/`; see `docs/PAPER2.md`.
 
 ## Rules the experiments support

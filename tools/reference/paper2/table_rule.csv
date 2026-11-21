@@ -1,6 +1,6 @@
 Evaluation,beta,Held out / decisive,All / band
-beta fitted on f1,0.95,164/182,197/218
-beta fitted on f4,0.85,164/182,199/218
+beta fitted on f1,0.95,161/178,194/214
+beta fitted on f4,0.85,162/178,197/214
 "v1 registered, pbft",0.90,11/12 decisive,5/5 band
 "v1 registered, hotstuff",0.90,6/8 decisive,0/0 band
 "v1 registered, raft",0.90,8/13 decisive,2/2 band

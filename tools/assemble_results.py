@@ -369,44 +369,58 @@ def fig_protocols(plt, cells, out):
 
 
 def fig_rule(plt, cells, out, registered):
+    """Two panels: the cells the rule was developed on (f1-p2), and the
+    registered validation cells (v1) alone, so the held-out evidence is not lost
+    among the rest. Cells without a margin (C5 verdicts, no trigger) are left out."""
     reg = set()
     if registered and os.path.isfile(registered):
         reg = {r["cell"] for r in csv.DictReader(open(registered))}
-    pts = [c for c in cells if c["rule_margin"] and c["set"] != "v1s"]
-    if not pts:
+    dev = [c for c in cells if c["rule_margin"] and not c["set"].startswith("v1")]
+    val = [c for c in cells if c["rule_margin"] and c["cell"] in reg]
+    if not dev and not val:
         return "rule skipped"
     rows = ["pbft", "hotstuff", "raft"]
     names = {"pbft": "PBFT", "hotstuff": "HotStuff", "raft": "Raft"}
-    fig, ax = plt.subplots(figsize=(3.5, 1.9))
-    ax.axvspan(0.9, 1.1, color="#efeeea", lw=0, zorder=0)
-    ax.axvline(1.0, color=INK2, lw=0.8, ls="--")
-    for i, c in enumerate(pts):
-        # Deterministic jitter (hash() is salted per process; the figure must repeat).
-        y = rows.index(c["protocol"]) + ((zlib.crc32(c["cell"].encode()) % 100) / 100 - 0.5) * 0.5
-        x = min(num(c["rule_margin"]), 3.0)
-        edge = INK if c["cell"] in reg else None
-        if c["failed"] == "1":
-            ax.scatter(x, y, marker="x", s=18, color=ORANGE, lw=1.2, zorder=3)
-            if edge:
-                ax.scatter(x, y, marker="s", s=46, facecolor="none", edgecolor=INK, lw=0.7, zorder=4)
+    panels = [(dev, "Development cells (f1-p2)"), (val, "Registered validation (v1)")]
+    panels = [p for p in panels if p[0]]
+    fig, axes = plt.subplots(1, len(panels), figsize=(7.16, 2.0), sharey=True,
+                             gridspec_kw={"wspace": 0.06,
+                                          "width_ratios": [2, 1] if len(panels) > 1 else [1]})
+    axes = axes if len(panels) > 1 else [axes]
+    for ax, (pts, title) in zip(axes, panels):
+        ax.axvspan(0.9, 1.1, color="#efeeea", lw=0, zorder=0)
+        ax.axvline(1.0, color=INK2, lw=0.8, ls="--")
+        for c in pts:
+            # Deterministic jitter (hash() is salted per process; the figure must repeat).
+            y = rows.index(c["protocol"]) + ((zlib.crc32(c["cell"].encode()) % 100) / 100 - 0.5) * 0.6
+            x = min(num(c["rule_margin"]), 3.0)
+            if c["failed"] == "1":
+                ax.scatter(x, y, marker="x", s=18, color=ORANGE, lw=1.2, zorder=3)
+            else:
+                ax.scatter(x, y, marker="o", s=16, facecolor="white", edgecolor=BLUE, lw=1.1, zorder=3)
+        ax.set_title(f"{title}, {len(pts)} cells", loc="left")
+        hi = max(num(c["rule_margin"]) for c in pts)
+        if hi > 1.6:
+            ax.set_xlim(0, 3.15)
+            ax.set_xlabel("Predicted wait / timeout (capped at 3)")
         else:
-            ax.scatter(x, y, marker="o", s=16, facecolor="white", edgecolor=BLUE, lw=1.1, zorder=3)
-            if edge:
-                ax.scatter(x, y, marker="s", s=46, facecolor="none", edgecolor=INK, lw=0.7, zorder=4)
-    ax.set_yticks(range(3))
-    ax.set_yticklabels([names[r] for r in rows])
-    ax.invert_yaxis()
-    ax.set_xlabel("Predicted wait / timeout (capped at 3)")
-    ax.text(1.0, 1.02, "no-claim band", ha="center", va="bottom", fontsize=7, color=INK2,
-            transform=ax.get_xaxis_transform())
-    h = [ax.scatter([], [], marker="x", color=ORANGE, lw=1.2, label="storm"),
-         ax.scatter([], [], marker="o", facecolor="white", edgecolor=BLUE, lw=1.1, label="recovered"),
-         ax.scatter([], [], marker="s", facecolor="none", edgecolor=INK, lw=0.7, label="registered (v1)")]
-    ax.legend(handles=h, loc="upper center", bbox_to_anchor=(0.5, -0.28), ncol=3,
-              handletextpad=0.3, columnspacing=1.0)
+            ax.set_xlim(0.5, 1.5)
+            ax.set_xlabel("Predicted wait / timeout")
+    axes[0].set_yticks(range(3))
+    axes[0].set_yticklabels([names[r] for r in rows])
+    axes[0].set_ylim(2.55, -0.55)
+    import matplotlib.patches as mpatches
+    h = [axes[0].scatter([], [], marker="x", color=ORANGE, lw=1.2, label="ran: storm or stuck"),
+         axes[0].scatter([], [], marker="o", facecolor="white", edgecolor=BLUE, lw=1.1,
+                         label="ran: recovered"),
+         mpatches.Patch(color="#efeeea", label="within 10% of the boundary: no claim")]
+    fig.legend(handles=h, loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=3,
+               handletextpad=0.4, columnspacing=1.5)
+    # The reading rule (left of the line: recovery predicted; right: a storm, except
+    # bounded recovery with spare capacity) belongs in the caption, not the image.
     save(fig, out, "rule")
     plt.close(fig)
-    return f"rule: {len(pts)} cells"
+    return f"rule: {len(dev)} development, {len(val)} registered cells"
 
 
 def main(argv):

@@ -36,7 +36,7 @@ no-fault run) for PBFT and Raft, the proposal's arrival for HotStuff.
 beta is the one free parameter: the share of the counted burst that is queued
 at once (the three phases of a round do not arrive together; measured queue
 peaks were 0.2-0.5 of B). --fit f1 picks beta on f1 alone and scores the rest
-as held out. The rule was written after f1-p3 were seen, so the score measures
+as held out. The rule was written after f1-p2 were seen, so the score measures
 how far one mechanism accounts for all of them, not foresight; a fresh set is
 the real test.
 """
