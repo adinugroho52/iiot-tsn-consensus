@@ -17,6 +17,8 @@ at commit `3d00954`, all 697 runs reproduce the reference results in `tools/refe
 `tools/verify_reproducibility.sh` repeats that check from scratch (see "Reproducing the paper's results" below). Later
 versions are listed in `CHANGELOG.md`.
 
+The second paper's results come from v2.0.0.
+
 ## Requirements
 
 - ns-3 with the DenKrysos TAS module in `contrib/tsn` (<https://github.com/DenKrysos/Time-Aware-Shaper-TAS-in-ns-3>).

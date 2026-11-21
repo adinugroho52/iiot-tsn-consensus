@@ -59,7 +59,7 @@ Captures and run logs are now byte-identical across machines. No result changes:
 - `tools/sweep.sh` and `tools/round_check.sh` build the program once and run each simulation with `./ns3 run --no-build`, as does the smoke test in `tools/verify_reproducibility.sh`. With Ninja, `./ns3 run` printed two build-tool lines at the top of every log.
 - `tools/reference/figs`, `figs_c005_8sw` and `figs_e14`: new checksums for 76 capture files. Their summaries and every other checksum are unchanged.
 
-## Unreleased (second paper)
+## v2.0.0 (2026-11-21)
 
 - `--pbftModel=v1|full`. `v1`, the default, keeps release 1.x's consensus code path, so every earlier run reproduces: `e1`, `e2e3e4`, `e6`, `e10`, `e11`, `e15`, `figs` and `figs_e14` (112 runs, captures included) are identical to `tools/reference/`. `full` counts votes per proposal, counts a node's own COMMIT (needed to tolerate f faults: only 2f correct peers remain), prepares only for a proposal it holds and re-checks earlier PREPAREs and COMMITs when the PRE-PREPARE arrives, rotates the primary (view v mod n), and adds the Castro-Liskov view change with exponential backoff. Messages of a view a node has not entered yet are held and replayed. Ported from the August adversarial branch, fixing a stall there: a backup whose PREPAREs arrived before its PRE-PREPARE never sent its COMMIT.
 - Consensus header grows from 24 to 32 bytes by appending view (byte 24) and digest (byte 28) to release 1.x's layout. Both are 0 in the `v1` model and for an honest proposal, so v1 messages are byte-identical and `tools/round_check.py` reads both versions. Message sizes do not change: the header sits inside `--consensusMsgSize`.
@@ -82,3 +82,4 @@ Captures and run logs are now byte-identical across machines. No result changes:
 - `tools/reference/paper2/`: `all_cells.csv` and the five table CSVs of the authors' run (ns-3.49, TAS module `3d00954`); no figures.
 - `tools/compare_reference.py`, run without set names, lists only first-paper sets, so it skips `reference/paper2/`.
 - `fault_sweep.sh`: sets `p2` and `p3` merged into one set, `p2` (55 cells). The 32 cells of `p3` are now named `p2-*`; four of them (HotStuff at k = 4: crash with timeouts 2 and 4, equivocate, flood2) ran exactly the same command as a `p2` cell and are dropped. Every remaining command is unchanged, so no result changes; the paper now has 329 cells. The rule's scores no longer count those four twice: 194/214 overall and 161/178 held out with beta fitted on f1 (was 197/218, 164/182), 197/214 and 162/178 fitted on f4 (was 199/218, 164/182); the fitted betas and the registered validation are unchanged.
+- This is the codebase and results behind the second paper, v1.x results still reproduce with `--pbftModel=v1`

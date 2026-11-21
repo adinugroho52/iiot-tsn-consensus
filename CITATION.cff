@@ -1,15 +1,15 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite the release you used, as below."
 type: software
-title: "iiot-tsn-consensus: packet-level simulation of PBFT-style consensus traffic sharing an IEEE 802.1Qbv network with a control loop"
-version: 1.1.0
-date-released: 2026-11-20
+title: "iiot-tsn-consensus: PBFT, HotStuff and Raft under faults on IEEE 802.11Qbv industrial networks"
+version: 2.0.0
+date-released: 2026-11-21
 license: MIT
 doi: 10.5281/zenodo.24384364
 identifiers:
   - type: doi
-    value: 10.5281/zenodo.24384365
-    description: "v1.0.0, the release behind the paper's results"
+    value: 10.5281/zenodo.24384364
+    description: "The GitHub repo"
 repository-code: "https://github.com/adinugroho52/iiot-tsn-consensus"
 authors:
   - given-names: Adi
@@ -29,8 +29,4 @@ keywords:
   - consensus
   - industrial IoT
 abstract: >-
-  An ns-3 simulation of PBFT-style consensus traffic sharing a Time-Sensitive
-  Networking (IEEE 802.1Qbv) chain with a periodic control loop, comparing the
-  time-aware shaper, strict priority and FIFO scheduling. Includes the
-  experiment driver, analysis scripts, a Wireshark dissector and a
-  reproducibility script that checks every run against reference results.
+Industrial networks that carry a control loop under IEEE 802.1Qbv time-aware shaping can also carry a consensus protocol’s traffic in a gated class of its own, but a schedule that admits the protocol’s normal-case traffic need not survive a fault. We study this with packet-level ns-3 simulation of PBFT with view changes and Byzantine behaviours, chained HotStuff and Raft, sharing a five-hop path with a 1 ms control loop, over 333 configurations. Configurations that pass a per-round frame-counting rule on the busiest link still fail after a single 1.5 s fault: when PBFT’s new primary re-proposes every held round, a crashed primary leaves 9% spare capacity insufficient, and the view-change storm continues after the node is back, with 5–18% of rounds reaching a quorum. Recovery needs about 25% (crash) and 40% (equivocation) spare capacity, independent of committee size from 7 to 16; bounding re-proposal to one or two rounds, with a view timeout of at least four rounds, removes the need for headroom. HotStuff and Raft need an eighth of PBFT’s window but fail the same way: HotStuff below about 25% spare over its worst round, Raft whenever catch-up is not flow-controlled. A recovery-burst rule with one fitted parameter accounts for 197 of 218 development configurations and, on 40 configurations registered before the runs, predicts 16 of 17 PBFT outcomes. The control loop never missed a deadline and no safety violation occurred.
