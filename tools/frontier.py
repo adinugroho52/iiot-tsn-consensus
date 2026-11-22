@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-frontier.py -- feasibility frontier for the control burst sweeps (sweep.sh e7,
-also reads e6 cells).
+frontier.py -- feasibility frontier for the control burst sweeps (sweep.sh e4,
+parts a and b).
 
 For each shaper and path length it finds the largest control burst B (frames per
 cycle) that still meets a deadline, with no late frame and no dropped frame.
@@ -11,8 +11,8 @@ deadline can be applied here without rerunning. Dropped frames never reach the
 sink, so they are counted from the number expected, not from the summary's
 miss ratio, which only sees frames that arrived.
 
-  frontier.py results_e7_1G [results_e7_100M ...]
-  frontier.py results_e7_1G --deadlines 150,250,500,1000 --plot frontier.png
+  frontier.py results_e4_1G [results_e4_100M ...]
+  frontier.py results_e4_1G --deadlines 150,250,500,1000 --plot frontier.png
 
 A cell fails a deadline when (late + lost) / expected > --tol (default 0). The
 frontier is the largest B for which that cell and every smaller B in the grid
@@ -22,11 +22,12 @@ pass. For TAS a closed form is printed beside it:
     capacity = floor(window / frame) + 1       (measured, see the 95 B run)
 
 capacity - 1 because a run exactly at capacity keeps a stuck backlog.
-Tags are read as  <shaper>-s<switches>-b<burst>  (e7),  b<burst>  (e6, 4
-switches assumed), or  <shaper>-s<switches>  (e5, burst 1 assumed; pass
---burst N if those cells were run with --extra --ctrlBurst=N).
+Tags are read as  <shaper>-s<switches>-b<burst>  (e4 part b),  b<burst>  (e4
+part a, 4 switches assumed), or  <shaper>-s<switches>  (e3, burst 1 assumed;
+pass --burst N if those cells were run with --extra --ctrlBurst=N). A leading
+part letter ("a-", "b-") is ignored.
 
-Joint map (e8 cells, tag <shaper>-s<sw>-n<validators>-m<bytes>-b<burst>): for each
+Joint map (e5 cells, tag <shaper>-s<sw>-n<validators>-m<bytes>-b<burst>): for each
 committee size x message size it prints the largest control burst for which
 control meets the deadline AND consensus still commits at least --commit-min of
 its rounds (default 99%; add --cons-p99 US for a commit-latency limit). "x" means
@@ -53,7 +54,8 @@ def measured(logpath):
 
 
 def parse_tag(tag, burst_default):
-    """-> (shaper, switches, burst, validators, msg_bytes); last two None unless e8."""
+    """-> (shaper, switches, burst, validators, msg_bytes); last two None unless e5."""
+    tag = re.sub(r'^[a-z]-', '', tag)    # part letter, e.g. e4 "b-tas-s4-b1"
     m = re.match(r'^(tas|prio|fifo)-s(\d+)-n(\d+)-m(\d+)-b(\d+)$', tag)
     if m:
         return m.group(1), int(m.group(2)), int(m.group(5)), int(m.group(3)), int(m.group(4))
@@ -112,7 +114,7 @@ def main():
     ap.add_argument('dirs', nargs='+')
     ap.add_argument('--deadlines', default='150,250,500,1000', help='microseconds, comma separated')
     ap.add_argument('--tol', type=float, default=0.0, help='allowed fraction of late or lost frames')
-    ap.add_argument('--burst', type=int, default=1, help='burst for tags that carry none (e5 cells)')
+    ap.add_argument('--burst', type=int, default=1, help='burst for tags that carry none (e3 cells)')
     ap.add_argument('--payload', type=int, default=64)
     ap.add_argument('--validators', type=int, default=16, help='committee size for cells whose tag carries none')
     ap.add_argument('--commit-min', type=float, default=0.99, help='consensus feasible if this share of rounds commit')
@@ -135,8 +137,8 @@ def main():
         print(f"{c['link']:>7} {c['shaper']:>6} {c['s']:>3} {c['B']:>4} {len(c['lat']):>9} "
               f"{100 * c['lost'] / c['expected']:>7.2f} {max(c['lat']) / 1000:>9.2f}")
 
-    # Control-only frontier: e5/e6/e7 cells, which share one fixed consensus load.
-    # e8 cells vary the consensus load, so they are kept out of this grid and
+    # Control-only frontier: e3/e4 cells, which share one fixed consensus load.
+    # e5 cells vary the consensus load, so they are kept out of this grid and
     # reported only in the joint map below.
     grid = defaultdict(list)
     for c in cells:
@@ -211,7 +213,7 @@ def main():
     print(f"\nwrote {a.csv}")
 
     if a.plot and not out:
-        print('nothing to plot: the control-only frontier needs e5/e6/e7 cells')
+        print('nothing to plot: the control-only frontier needs e3/e4 cells')
     elif a.plot:
         try:
             import matplotlib

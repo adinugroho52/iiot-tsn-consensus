@@ -59,6 +59,30 @@ Captures and run logs are now byte-identical across machines. No result changes:
 - `tools/sweep.sh` and `tools/round_check.sh` build the program once and run each simulation with `./ns3 run --no-build`, as does the smoke test in `tools/verify_reproducibility.sh`. With Ninja, `./ns3 run` printed two build-tool lines at the top of every log.
 - `tools/reference/figs`, `figs_c005_8sw` and `figs_e14`: new checksums for 76 capture files. Their summaries and every other checksum are unchanged.
 
+## v1.2.0
+
+Experiments that answer one question are now one experiment with parts, as e9 (formerly e12) already was, and the
+rest are renumbered to match the paper. Runs, flags and results are unchanged; only names differ.
+
+| Before | Now | Run names | Environment knobs |
+|---|---|---|---|
+| e2, e3, e4 | e2 (a), (b), (c) | `e2-a-…`, `e2-b-…`, `e2-c-…` | — |
+| e5 | e3 | `e3-…` | — |
+| e6, e7 | e4 (a), (b) | `e4-a-…`, `e4-b-…` | `E6_*` → `E4A_*`, `E7_*` → `E4B_*` |
+| e8 to e15 | e5 to e12 | `e5-…` to `e12-…` | `E8_*` → `E5_*`, …, `E15_*` → `E12_*` |
+| figs_e14 | figs_e11 | `fig-e11` | — |
+
+- `sweep.sh e2` and `sweep.sh e4` run every part; `e2a`, `e2b`, `e2c`, `e4a` and `e4b` run one. `all` still leaves out
+  the uncertainty draws (now e9) and the capture sets.
+- `tools/reference/` sets are renamed to match (`e2e3e4` → `e2`; `e6` and `e7` → `e4`; `e6_100M` and `e7_100M` →
+  `e4_100M`; `e14` → `e11`; `e15` → `e12`; `figs_e14` → `figs_e11`; and so on). Every checksum is unchanged, since no run
+  log or per-frame CSV carries its run's name, except two files of `figs_e11`: its run log and capture manifest name
+  the capture files, so they now say `fig-e11` where they said `fig-e14`. Every capture in that set is byte-identical
+  to v1.1.0's.
+- `tools/round_check.sh` labels its runs with the new set and run names.
+- `frontier.py` ignores the part letter in a tag, so it reads results under either numbering.
+  `verify_reproducibility.sh --quick` now covers part (a) of e4 through its 150 µs-deadline set.
+
 ## v2.0.0 (2026-11-21)
 
 - `--pbftModel=v1|full`. `v1`, the default, keeps release 1.x's consensus code path, so every earlier run reproduces: `e1`, `e2e3e4`, `e6`, `e10`, `e11`, `e15`, `figs` and `figs_e14` (112 runs, captures included) are identical to `tools/reference/`. `full` counts votes per proposal, counts a node's own COMMIT (needed to tolerate f faults: only 2f correct peers remain), prepares only for a proposal it holds and re-checks earlier PREPAREs and COMMITs when the PRE-PREPARE arrives, rotates the primary (view v mod n), and adds the Castro-Liskov view change with exponential backoff. Messages of a view a node has not entered yet are held and replayed. Ported from the August adversarial branch, fixing a stall there: a backup whose PREPAREs arrived before its PRE-PREPARE never sent its COMMIT.
