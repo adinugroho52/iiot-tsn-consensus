@@ -108,17 +108,11 @@ rest are renumbered to match the paper. Runs, flags and results are unchanged; o
 - `fault_sweep.sh`: sets `p2` and `p3` merged into one set, `p2` (55 cells). The 32 cells of `p3` are now named `p2-*`; four of them (HotStuff at k = 4: crash with timeouts 2 and 4, equivocate, flood2) ran exactly the same command as a `p2` cell and are dropped. Every remaining command is unchanged, so no result changes; the paper now has 329 cells. The rule's scores no longer count those four twice: 194/214 overall and 161/178 held out with beta fitted on f1 (was 197/218, 164/182), 197/214 and 162/178 fitted on f4 (was 199/218, 164/182); the fitted betas and the registered validation are unchanged.
 - This is the codebase and results behind the second paper, v1.x results still reproduce with `--pbftModel=v1`
 
-## Unreleased
+## v2.1.0 (2026-11-23)
 
-Raft is removed: the second paper studies the Byzantine-fault-tolerant protocols, PBFT and HotStuff. PBFT and HotStuff
-are unchanged, and every remaining cell runs the same command as before.
-
-- Simulator: `--protocol=raft` and `--raftCatchup` are removed, with the Raft model (leader, elections, AppendEntries,
-  catch-up limit) and its report lines. `--protocol` takes `pbft` or `hotstuff`. The Raft model drew its election
-  timeouts from its own random streams (1000 + node), created only in Raft runs, so no PBFT or HotStuff run changes.
-- `fault_sweep.sh`: `p1` (9 cells) and `p2` (31 cells) hold PBFT and HotStuff only, and the Raft seed set `v1s` is gone.
-  `v1` runs the 25 PBFT and HotStuff cells of the registered file. The file itself is unchanged, its 15 Raft rows
-  included, since its SHA-256 is the registration; `fault_sweep.sh` and `recovery_rule.py` skip those rows.
+Second paper narrowed to Byzantine, the Raft model is removed
+- Simulator: `--protocol=raft` no longer existsi.
+- `fault_sweep.sh`: `p1` (9 cells) and `p2` (31 cells) hold PBFT and HotStuff only, and the Raft seed set `v1s` is gone. `v1` runs the 25 PBFT and HotStuff cells of the registered file.
 - `vc_budget.py`, `recovery_rule.py`, `fault_report.py`: Raft load, burst and latency models removed. The rule's PBFT and
   HotStuff predictions are unchanged: `validation_design.py`, with its Raft groups removed, writes exactly the 25 PBFT
   and HotStuff rows of the registered file.
