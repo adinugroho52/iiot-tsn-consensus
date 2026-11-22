@@ -7,7 +7,7 @@ the vc_budget.py predictions against it.
 
 Outcome of a cell (T = round interval, from the configuration name):
     storm      more than 3 view changes per node (views entered / n: PBFT
-               views, HotStuff timeouts, Raft elections) and rounds were lost or abandoned
+               views, HotStuff timeouts) and rounds were lost or abandoned
                (more than 5% abandoned): view changes kept coming at a cost.
     churn      more than 3 view changes per node but every round still reached a
                quorum: view changes cost bandwidth, not liveness.
@@ -32,7 +32,7 @@ from collections import Counter, defaultdict
 
 def committee(config):
     """n from the configuration name (f5 n7..., v1 pbftn10..., else 10 at 100 Mbps, 16)."""
-    m = re.match(r"(?:pbft|hs|raft)?n(\d+)", config)
+    m = re.match(r"(?:pbft|hs)?n(\d+)", config)
     return int(m.group(1)) if m else (10 if config.startswith("100m") else 16)
 
 
@@ -59,7 +59,7 @@ def main(argv):
         opened, q = int(r["rounds_opened"] or 0), int(r["quorum_done"] or 0)
         ab = int(r["abandoned"] or 0)
         # View changes per node: the views entered by all nodes over n (PBFT views,
-        # HotStuff pacemaker timeouts, Raft elections started). The highest view
+        # HotStuff pacemaker timeouts). The highest view
         # would not do: in HotStuff the view is the block height.
         mv = int(r["views_entered"] or 0) / committee(r["config"])
         r["vc_node"] = f"{mv:.1f}"

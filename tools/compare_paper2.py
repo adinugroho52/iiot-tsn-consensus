@@ -2,8 +2,8 @@
 """
 compare_paper2.py -- check the second paper's results against its reference.
 
-    tools/compare_paper2.py check NEW REFERENCE [--sets f1 p1 ...]
-    tools/compare_paper2.py make  NEW REFERENCE
+    tools/compare_paper2.py check NEW REFERENCE [--csvdir DIR] [--sets f1 p1 ...]
+    tools/compare_paper2.py make  NEW REFERENCE [--csvdir DIR]
 
 NEW is a folder written by tools/assemble_results.py (all_cells.csv and the
 table_*.csv files); REFERENCE is tools/reference/paper2/ in this repository,
@@ -19,15 +19,22 @@ assembled from the authors' runs (ns-3.49, TAS module commit 3d00954).
   3. values: every column of every cell (views, rounds, drops, latencies...)
      equals the reference, and every table the paper prints (table_*.csv)
      equals the reference. Tables are compared only on a full run, since a
-     partial sweep yields partial tables.
+     partial sweep yields partial tables. With --csvdir (the sweep's csv/
+     folder), the SHA-256 of every cell's per-round CSV is compared with
+     REFERENCE/rounds-sha256.txt too: those files are what the timeline figure
+     is drawn from, and nothing else checks them.
 
-The simulation is deterministic (Raft's random election timeouts are seeded by
-the run number), so a matching build reproduces all three levels exactly.
+Together these cover every number behind every table and figure, so the
+figures themselves (fonts and rendering differ between machines) are not
+compared. The simulation is deterministic, so a matching build reproduces all
+three levels exactly.
 Exit status 0 if every level holds, 1 otherwise. `make` copies the reference
-files from NEW into REFERENCE (for maintainers, after a deliberate change).
+files from NEW (and, with --csvdir, the per-round checksums) into REFERENCE,
+for maintainers, after a deliberate change.
 """
 import argparse
 import csv
+import hashlib
 import os
 import shutil
 import sys
@@ -35,6 +42,27 @@ import sys
 TABLES = ("table_protocols.csv", "table_headroom.csv", "table_f1grid.csv",
           "table_rule.csv", "table_control.csv")
 KEY_COLS = ("outcome", "rule_prediction")
+ROUNDS = "rounds-sha256.txt"
+SUFFIX = "-rounds.csv"
+
+
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def load_sums(path):
+    """cell -> SHA-256 of its per-round CSV, from a sha256sum-style file."""
+    sums = {}
+    with open(path) as f:
+        for line in f:
+            if line.strip():
+                digest, name = line.split(None, 1)
+                sums[name.strip()[:-len(SUFFIX)]] = digest
+    return sums
 
 
 def load_cells(path):
@@ -48,7 +76,7 @@ def load_rows(path):
         return list(csv.reader(f))
 
 
-def check(new, ref, sets):
+def check(new, ref, sets, csvdir=None):
     ok = True
     newc = load_cells(os.path.join(new, "all_cells.csv"))
     refc = load_cells(os.path.join(ref, "all_cells.csv"))
@@ -133,20 +161,55 @@ def check(new, ref, sets):
                         print(f"      reference: {','.join(ra)}")
                         print(f"      now:       {','.join(rb)}")
 
+    # 3c. the per-round CSVs (what the timeline figure is drawn from)
+    print("\n3c. per-round CSVs")
+    rounds_line = "not checked (no --csvdir)"
+    sums_path = os.path.join(ref, ROUNDS)
+    if not csvdir:
+        print("   skipped: no --csvdir given")
+    elif not os.path.isfile(sums_path):
+        print(f"   skipped: the reference has no {ROUNDS}")
+        rounds_line = f"not checked (no {ROUNDS} in the reference)"
+    else:
+        want = {c: d for c, d in load_sums(sums_path).items() if c in refc}
+        gone, differ = [], []
+        for cell, digest in sorted(want.items()):
+            path = os.path.join(csvdir, cell + SUFFIX)
+            if not os.path.isfile(path):
+                gone.append(cell)
+            elif sha256(path) != digest:
+                differ.append(cell)
+        same = len(want) - len(gone) - len(differ)
+        print(f"   identical  {same} of {len(want)}")
+        for cell in gone[:10]:
+            print(f"   MISSING    {cell}{SUFFIX}")
+        for cell in differ[:10]:
+            print(f"   DIFFERS    {cell}{SUFFIX}")
+        if gone or differ:
+            ok = False
+        rounds_line = f"{same}/{len(want)}"
+
     n_out = len(refc) - len(out_diff) - len(missing)
     print("\nverdict")
     print(f"   isolation and safety hold      {'yes' if not (missed or unsafe) else 'NO'}")
     print(f"   outcomes reproduced            {n_out}/{len(refc)}")
     print(f"   cells identical in every value {len(refc) - len(val_diff) - len(missing)}/{len(refc)}")
+    print(f"   per-round CSVs identical       {rounds_line}")
     print(f"   result: {'REPRODUCED' if ok else 'NOT REPRODUCED (see above)'}")
     return 0 if ok else 1
 
 
-def make(new, ref):
+def make(new, ref, csvdir=None):
     os.makedirs(ref, exist_ok=True)
     for f in ("all_cells.csv",) + TABLES:
         shutil.copyfile(os.path.join(new, f), os.path.join(ref, f))
         print(f"wrote {os.path.join(ref, f)}")
+    if csvdir:
+        cells = sorted(load_cells(os.path.join(new, "all_cells.csv")))
+        with open(os.path.join(ref, ROUNDS), "w") as f:
+            for cell in cells:
+                f.write(f"{sha256(os.path.join(csvdir, cell + SUFFIX))}  {cell}{SUFFIX}\n")
+        print(f"wrote {os.path.join(ref, ROUNDS)}")
     return 0
 
 
@@ -157,10 +220,12 @@ def main(argv=None):
     ap.add_argument("reference")
     ap.add_argument("--sets", nargs="*", default=None,
                     help="compare only these sets (cells only, no tables)")
+    ap.add_argument("--csvdir", help="the sweep's csv/ folder: check (or record) the "
+                    "per-round CSVs' SHA-256")
     a = ap.parse_args(argv)
     if a.mode == "make":
-        return make(a.new, a.reference)
-    return check(a.new, a.reference, set(a.sets) if a.sets else None)
+        return make(a.new, a.reference, a.csvdir)
+    return check(a.new, a.reference, set(a.sets) if a.sets else None, a.csvdir)
 
 
 if __name__ == "__main__":

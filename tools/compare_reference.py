@@ -21,7 +21,6 @@ With no SET arguments, every set in REFERENCE (check) or RESULTS (make) is used.
 """
 import csv
 import hashlib
-import io
 import os
 import sys
 

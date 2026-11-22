@@ -7,12 +7,11 @@ fault_sweep.sh cell.
     tools/recovery_rule.py --outcomes outcomes.csv              # cell,outcome[,...] rows
     ... [--beta B | --fit f1] [--list]
 
-THE RULE (for PBFT, chained HotStuff and Raft alike). C and M are the consensus
+THE RULE (for PBFT and chained HotStuff alike). C and M are the consensus
 frames per round the busiest link passes and carries (tools/vc_budget.py; the
 worst round for HotStuff, the attacker's frames included). T is the round
-interval, T_to the timeout (Raft: the mean election timeout, 1.5 x
---viewTimeout), L0 the normal latency the timeout races: the commit (p99 of a
-no-fault run) for PBFT and Raft, the proposal's arrival for HotStuff.
+interval, T_to the timeout, L0 the normal latency the timeout races: the commit
+(p99 of a no-fault run) for PBFT, the proposal's arrival for HotStuff.
 
   1. Steady state: if M > C, the configuration fails (C5).
   2. Trigger: a crash or an equivocation always starts a recovery; a timeout
@@ -22,16 +21,12 @@ no-fault run) for PBFT and Raft, the proposal's arrival for HotStuff.
        PBFT      VIEW-CHANGE + NEW-VIEW + R re-proposed rounds (vc_budget.py),
                  R = the stalled rounds, capped by --reproposeWindow
        HotStuff  NEW-VIEW + the block carrying the stalled rounds (vc_budget.py)
-       Raft      the larger of the post-election catch-up (n-1 followers x
-                 min(R, L) entries) and, after a crash, the returning node's
-                 backlog (min(window rounds, L) entries); L = --raftCatchup
   4. The burst delays the next rounds by about beta x B / C rounds. If
      L0 + beta x (B / C) x T stays below T_to, the recovery ends: RECOVERS.
-  5. Otherwise a second timeout fires. Unbounded recovery (PBFT window 0, Raft
-     without a catch-up limit) re-sends everything outstanding, which only
-     grows: STORM. Bounded recovery (a PBFT re-propose window, a Raft catch-up
-     limit, HotStuff, whose catch-up block carries one stall) storms only if
-     there is no spare capacity S = C - M to drain it.
+  5. Otherwise a second timeout fires. Unbounded recovery (PBFT window 0)
+     re-sends everything outstanding, which only grows: STORM. Bounded recovery
+     (a PBFT re-propose window, or HotStuff, whose catch-up block carries one
+     stall) storms only if there is no spare capacity S = C - M to drain it.
 
 beta is the one free parameter: the share of the counted burst that is queued
 at once (the three phases of a round do not arrive together; measured queue
@@ -53,8 +48,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vc_budget as vb  # noqa: E402
 
 FRAME_US = 8.432          # 1024 B + 30 B at 1 Gbps
-FAULT_S = 1.5             # fault window length in fault_sweep.sh
-
 
 def parse_cell(cell):
     """Parameters of a fault_sweep.sh cell from its name."""
@@ -68,7 +61,7 @@ def parse_cell(cell):
         elif re.fullmatch(r"w\d+", p):
             win = int(p[1:])
     c = dict(set=st, config=cfg, attack=atk, to_rounds=to, window=win, protocol="pbft",
-             n=16, switches=4, rate=1e9, catchup=0)
+             n=16, switches=4, rate=1e9)
     m = re.fullmatch(r"w(\d+)t(\d+)", cfg)
     if m:
         c.update(frac=int(m.group(1)) / 1000, T=float(m.group(2)))
@@ -77,23 +70,21 @@ def parse_cell(cell):
     elif re.fullmatch(r"n(\d+)c(\d+)t(\d+)", cfg):
         n, cc, t = map(int, re.fullmatch(r"n(\d+)c(\d+)t(\d+)", cfg).groups())
         c.update(n=n, frac=((cc // 4) * FRAME_US + 4) / 1000, T=float(t))
-    elif re.fullmatch(r"(pbft|hs|raft)n(\d+)([gm])k(\d+)(?:c(\d+))?t(\d+)", cfg):
+    elif re.fullmatch(r"(pbft|hs)n(\d+)([gm])k(\d+)t(\d+)", cfg):
         # Validation cells: protocol, n, g (1 Gbps, 4 switches) or m (100 Mbps,
-        # 8 switches), k frames per cycle, optional Raft catch-up, T.
-        pr, n, net, k, L, t = re.fullmatch(
-            r"(pbft|hs|raft)n(\d+)([gm])k(\d+)(?:c(\d+))?t(\d+)", cfg).groups()
+        # 8 switches), k frames per cycle, T.
+        pr, n, net, k, t = re.fullmatch(r"(pbft|hs)n(\d+)([gm])k(\d+)t(\d+)", cfg).groups()
         rate = 1e9 if net == "g" else 1e8
-        c.update(protocol={"pbft": "pbft", "hs": "hotstuff", "raft": "raft"}[pr], n=int(n),
+        c.update(protocol={"pbft": "pbft", "hs": "hotstuff"}[pr], n=int(n),
                  rate=rate, switches=4 if net == "g" else 8,
-                 frac=(int(k) * FRAME_US * 1e9 / rate + 4) / 1000, T=float(t),
-                 catchup=int(L or 0))
+                 frac=(int(k) * FRAME_US * 1e9 / rate + 4) / 1000, T=float(t))
     else:
-        m = re.fullmatch(r"(pbft|hs|raft)k(\d+)(?:c(\d+))?t(\d+)", cfg)
+        m = re.fullmatch(r"(pbft|hs)k(\d+)t(\d+)", cfg)
         if not m:
             raise ValueError("unknown configuration " + cfg)
-        proto = {"pbft": "pbft", "hs": "hotstuff", "raft": "raft"}[m.group(1)]
+        proto = {"pbft": "pbft", "hs": "hotstuff"}[m.group(1)]
         c.update(protocol=proto, frac=(int(m.group(2)) * FRAME_US + 4) / 1000,
-                 T=float(m.group(4)), catchup=int(m.group(3) or 0))
+                 T=float(m.group(3)))
     fl = re.fullmatch(r"flood(\d+)", atk)
     c["flood"] = int(fl.group(1)) if fl else 0
     return c
@@ -130,8 +121,7 @@ def flood_load(c):
             mean, _ = vb.sustained(loads)
             vb.MULT.clear()
             worst = max(max(vb.hs_round(n, sw, v, list(range(n))).values()) for v in range(n))
-            return max(worst, math.ceil(max(mean.values())))
-        return max(vb.rf_round(n, sw, 0, list(range(n))).values())
+        return max(worst, math.ceil(max(mean.values())))
     finally:
         vb.MULT.clear()
 
@@ -142,21 +132,17 @@ def flood_load(c):
 MEASURED_L0 = {
     ("pbft", "w300t6"): 3.60, ("pbft", "w300t4"): 3.63, ("pbft", "w275t4"): 4.42,
     ("pbft", "100mt8"): 7.62,
-    ("raft", "raftk4t4"): 8.43, ("raft", "raftk5t4"): 7.44, ("raft", "raftk35t4"): 4.56,
 }
 
 
 def normal_latency_ms(c):
-    """L0: the normal latency the timeout races. PBFT and Raft time the commit
-    (p99 from the p1 and f2 no-fault runs); HotStuff's pacemaker times only the
-    proposal's arrival, one network hop after the tick, not the three-round commit."""
+    """L0: the normal latency the timeout races. PBFT times the commit (p99 from
+    the f2 no-fault runs); HotStuff's pacemaker times only the proposal's arrival,
+    one network hop after the tick, not the three-round commit."""
     if c["protocol"] == "hotstuff":
         return 1.0
-    base = re.sub(r"c\d+t", "t", c["config"]) if c["protocol"] == "raft" else c["config"]
-    if (c["protocol"], base) in MEASURED_L0:
-        return MEASURED_L0[(c["protocol"], base)]
-    if c["protocol"] == "raft":
-        return c["T"] + 0.6              # followers learn the commit a tick later
+    if (c["protocol"], c["config"]) in MEASURED_L0:
+        return MEASURED_L0[(c["protocol"], c["config"])]
     return 7.6 if c["rate"] < 1e9 else 3.6
 
 
@@ -165,7 +151,7 @@ def predict(c, beta):
     c["margin"] = None
     T = c["T"]
     to = c["to_rounds"] * T
-    t_eff = 1.5 * to if c["protocol"] == "raft" else to
+    t_eff = to
     L0 = normal_latency_ms(c)
     fault = c["attack"] in ("crash", "equivocate")
     nf = budget(c, "--no-fault", "--crash=")
@@ -178,22 +164,14 @@ def predict(c, beta):
     if not fault and L0 < t_eff:
         return "ok", f"no trigger: L0 {L0:.1f} < timeout {t_eff:.1f} ms"
     # The recovery burst.
-    if c["protocol"] == "raft":
-        L = c["catchup"] or math.inf
-        R = math.ceil(1.5 * to / T)
-        B = (c["n"] - 1) * min(R, L)
-        if c["attack"] == "crash":
-            B = max(B, min(round(FAULT_S * 1000 / T), L))
-        bounded = c["catchup"] > 0
-    else:
-        crash = "0" if c["attack"] == "crash" else ""
-        extra = ["--crash=" + crash]
-        if c["protocol"] == "pbft":
-            extra += ["--repropose", str(c["window"])]
-        B = int(budget(c, *extra)["B"])
-        # HotStuff's catch-up block carries only the rounds of one stall, so it is
-        # bounded like a PBFT re-propose window.
-        bounded = c["protocol"] == "hotstuff" or c["window"] > 0
+    crash = "0" if c["attack"] == "crash" else ""
+    extra = ["--crash=" + crash]
+    if c["protocol"] == "pbft":
+        extra += ["--repropose", str(c["window"])]
+    B = int(budget(c, *extra)["B"])
+    # HotStuff's catch-up block carries only the rounds of one stall, so it is
+    # bounded like a PBFT re-propose window.
+    bounded = c["protocol"] == "hotstuff" or c["window"] > 0
     wait = L0 + beta * B / C * T
     c["margin"] = wait / t_eff
     if wait < t_eff:

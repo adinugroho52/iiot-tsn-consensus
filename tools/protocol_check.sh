@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# protocol_check.sh -- check the HotStuff and Raft models before the protocol
-# comparison uses them. Same layout as tools/adversary_check.sh: run from the
+# protocol_check.sh -- check the HotStuff model before the protocol comparison
+# uses it. Same layout as tools/adversary_check.sh: run from the
 # ns-3 root after building iiot-consensus-tsn.
 #
 #     tools/protocol_check.sh             # all scenarios, a few minutes
@@ -113,50 +113,6 @@ if sel hs-n16; then
     check hs-n16 "node-rounds committed ($c of $((r*16)))" 'all "$c" "$((r*16))" 64'
     check hs-n16 "consensus queue peak below 40 frames" 'lt "$(get "$L" "^  consensus peak" 3)" 40'
     summary "$L"
-  fi
-fi
-
-# --- Raft --------------------------------------------------------------------------
-if sel raft-noattack; then
-  echo "raft-noattack: n=4, no fault. Expect no election, 6 messages per round, every round committed by every node (followers one tick after the leader)."
-  if run raft-noattack --protocol=raft; then
-    r=$(get "$L" '^  rounds started' 3); c=$(get "$L" '^  rounds committed' 3)
-    check raft-noattack "no election" '[[ "$(get "$L" "^  views entered" 3)" == 0 ]]'
-    check raft-noattack "msgs/round about 6" 'near "$(get "$L" "^  msgs/round actual" 3)" 6 0.2'
-    check raft-noattack "node-rounds committed ($c of $((r*4)))" 'all "$c" "$((r*4))" 8'
-    check raft-noattack "commit latency p50 below 1.5 rounds" 'lt "$(get "$L" "^  commit latency p50" 4)" 15000'
-    summary "$L"
-  fi
-fi
-
-if sel raft-crash; then
-  echo "raft-crash: n=4, the leader crashes. Expect an election within one to two timeouts (40-80 ms), a stall below 200 ms, no safety violation, every round reaching a majority, and the old leader rejoining as a follower."
-  if run raft-crash --protocol=raft --attack=crash $WIN; then
-    check raft-crash "elections won > 0" 'ge "$(get "$L" "^  broadcasts  view-change" 5)" 1'
-    check raft-crash "longest stall below 200 ms" 'lt "$(get "$L" "^  longest stall" 3)" 200000'
-    safe raft-crash
-    quorum_all raft-crash 2
-    summary "$L"
-  fi
-fi
-
-if sel raft-crash2; then
-  echo "raft-crash2: n=4, two nodes crash, leaving 2 of 4: no majority. Expect no commit during the window, no safety violation, and progress after it."
-  if run raft-crash2 --protocol=raft --attack=crash --nByzantine=2 $WIN; then
-    check raft-crash2 "longest stall at least 1 s" 'ge "$(get "$L" "^  longest stall" 3)" 1000000'
-    check raft-crash2 "rounds still reach a majority overall" 'ge "$(get "$L" "^  rounds quorum-done" 3)" 1'
-    safe raft-crash2
-    summary "$L"
-  fi
-fi
-
-if sel raft-equivocate; then
-  echo "raft-equivocate: Raft has no Byzantine defence; the simulator must refuse --attack=equivocate."
-  L="$OUT/raft-equivocate.log"
-  if "$NS3" run --no-build "$PROG $BASE --protocol=raft --attack=equivocate $WIN" > "$L" 2>&1; then
-    echo "  FAIL  the run was accepted"; FAIL=$((FAIL+1))
-  else
-    check raft-equivocate "refused with a message" 'grep -q "crash faults only" "$L"'
   fi
 fi
 

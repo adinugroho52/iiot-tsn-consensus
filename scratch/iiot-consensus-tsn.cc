@@ -134,16 +134,13 @@ static const uint32_t CLASS_BE        = 1;   // from ToS 0x00 -> prio 0
 //         and the f+1 rule for joining a view change early.
 //
 // Other protocols, chosen with --protocol (on the full model's round clock,
-// timeouts, adversary hooks and oracle; details at the HsTick and RaftTick code):
+// timeouts, adversary hooks and oracle; details at the HsTick code):
 //   hotstuff  chained HotStuff: leader v mod n proposes block v to all, every
 //             replica votes to the next leader, 3-chain commit. 2(n-1) messages
 //             per round; a missing proposal costs a pacemaker timeout and a
 //             NEW-VIEW to the next leader, not an all-to-all burst.
-//   raft      crash faults only: a fixed leader's AppendEntries to each follower
-//             and their acknowledgements, 2(n-1) per round; elections on a
-//             randomised timeout. --attack=equivocate is refused.
-// A message carrying k rounds of payload (a block after a stall, Raft entries
-// for a follower that fell behind) is sent as k frames.
+// A message carrying k rounds of payload (a block after a stall) is sent as k
+// frames.
 //
 // Byzantine behaviours (adversary.h, full model only), active inside the
 // attack window [attackStart, attackStop):
@@ -221,11 +218,9 @@ public:
    */
   void SetReproposeWindow(uint32_t k) { m_reproposeWindow = k; }
 
-  enum Proto : uint8_t { PROTO_PBFT, PROTO_HOTSTUFF, PROTO_RAFT };
-  /** HotStuff or Raft instead of PBFT. Needs SetFullModel (timeouts, backoff, cap). */
+  enum Proto : uint8_t { PROTO_PBFT, PROTO_HOTSTUFF };
+  /** HotStuff instead of PBFT. Needs SetFullModel (timeouts, backoff, cap). */
   void SetProtocol(Proto p) { m_proto = p; }
-  /** Raft: entries per follower per tick (0 = everything outstanding at once). */
-  void SetRaftCatchup(uint32_t k) { m_rfCatchup = k; }
   uint32_t GetAbandoned() const { return m_abandoned; }
   uint32_t GetEscalations() const { return m_escalations; }
   bool AtViewCap() const { return m_full && m_viewsEntered >= m_maxViews; }
@@ -266,13 +261,12 @@ public:
   // node's clock ticks in full (all nodes tick together).
   uint32_t GetRoundsOpened()   const { return m_full ? m_expected : m_sentPrePrepare; }
   bool IsHotStuff() const { return m_proto == PROTO_HOTSTUFF; }
-  bool IsRaft() const { return m_proto == PROTO_RAFT; }
   uint32_t GetSentViewChange() const { return m_sentViewChange; }
   uint32_t GetSentNewView()    const { return m_sentNewView; }
   uint32_t GetViewsEntered()   const { return m_viewsEntered; }
   uint32_t GetView() const
   {
-    return m_proto == PROTO_HOTSTUFF ? m_hsView : m_proto == PROTO_RAFT ? m_rfTerm : m_view;
+    return m_proto == PROTO_HOTSTUFF ? m_hsView : m_view;
   }
   /** Rounds in which PREPAREs from 2f senders arrived before the PRE-PREPARE. */
   uint32_t GetOvertaken()      const { return m_overtaken; }
@@ -345,11 +339,6 @@ private:
         m_hsBlocks[0].certified = m_hsBlocks[0].committed = true;   // genesis
         m_roundEvent = Simulator::Schedule(m_roundInterval, &ConsensusApp::HsTick, this);
       }
-    else if (m_proto == PROTO_RAFT)
-      {
-        RfInit();
-        m_roundEvent = Simulator::Schedule(m_roundInterval, &ConsensusApp::RaftTick, this);
-      }
     else if (m_full)
       {
         m_roundEvent = Simulator::Schedule(m_roundInterval, &ConsensusApp::RoundTick, this);
@@ -365,7 +354,6 @@ private:
   {
     m_roundEvent.Cancel();
     m_hsTimer.Cancel();
-    m_rfElection.Cancel();
     for (auto& kv : m_rounds) kv.second.timer.Cancel();
     if (m_rxSocket) m_rxSocket->Close();
   }
@@ -723,23 +711,21 @@ private:
     return true;
   }
 
-  // ---- HotStuff (chained) and Raft: traffic models on the same round clock ----------
+  // ---- HotStuff (chained): a traffic model on the same round clock -----------------
   //
-  // Both reuse the sockets, the round clock (one request per tick, known to every
+  // It reuses the sockets, the round clock (one request per tick, known to every
   // node, as in the full PBFT model), the adversary hooks and the oracle. A
   // message that carries k rounds of payload is sent as k frames (k-1
-  // continuation frames, then the frame with the header), so a block or an
-  // AppendEntries covering a backlog is charged like PBFT's re-proposed rounds.
+  // continuation frames, then the frame with the header), so a block covering a
+  // backlog is charged like PBFT's re-proposed rounds.
   // Receivers act on the header frame only.
 
   static constexpr uint8_t CONT = 0x80;     // continuation frame: bandwidth only
-  enum ProtoMsg : uint8_t { HS_PROPOSAL = 10, HS_VOTE = 11, HS_NEWVIEW = 12,
-                            RF_APPEND = 20, RF_ACK = 21, RF_REQVOTE = 22, RF_VOTE = 23 };
+  enum ProtoMsg : uint8_t { HS_PROPOSAL = 10, HS_VOTE = 11, HS_NEWVIEW = 12 };
 
   int64_t TickNs(uint32_t r) const { return m_startNs + int64_t(r) * m_roundInterval.GetNanoSeconds(); }
   size_t SlotOf(uint32_t node) const { return node < m_self ? node : node - 1; }
   uint32_t QuorumBft() const { return m_n - m_f; }          // 2f+1 when n = 3f+1
-  uint32_t Majority() const { return m_n / 2 + 1; }
 
   /** k frames to one node: k-1 continuations, then the header. Floods and crashes apply. */
   void SendFrames(uint32_t node, const std::vector<uint8_t>& buf, uint32_t k)
@@ -964,204 +950,6 @@ private:
       m_hsNewViews.erase(m_hsNewViews.begin());
   }
 
-  // ---- Raft ---------------------------------------------------------------------------
-  //
-  // Validator 0 leads term 1. At every tick the leader appends the round to its
-  // log and sends each follower an AppendEntries with everything from that
-  // follower's next index (one frame per entry, one header frame when there is
-  // nothing new: the heartbeat), assuming delivery (next index moves on). A
-  // follower accepts entries that continue its log and acknowledges its last
-  // index, or rejects with it, and the leader resends from there. The leader
-  // commits an index held by a majority; followers commit what the next
-  // AppendEntries reports. A follower that hears no leader for a randomised
-  // [1, 2) x timeout starts an election (RequestVote to all, votes to the
-  // candidate, majority wins); the new leader appends the rounds that ticked
-  // without a leader and resumes. Crash faults only: Raft has no defence against
-  // equivocation, so --attack=equivocate is refused.
-  // Not modelled: log conflicts (every entry is the round's request, the same in
-  // any term) and the current-term commit rule.
-
-  enum RfRole : uint8_t { RF_FOLLOWER, RF_CANDIDATE, RF_LEADER };
-
-  void RfInit()
-  {
-    m_rfRng = CreateObject<UniformRandomVariable>();
-    m_rfRng->SetStream(1000 + m_self);
-    m_rfNext.assign(m_n, 1);
-    m_rfMatch.assign(m_n, 0);
-    m_rfTerm = 1;
-    m_rfLeader = 0;
-    m_rfRole = (m_self == 0) ? RF_LEADER : RF_FOLLOWER;
-    if (m_rfRole != RF_LEADER) RfArmElection();
-  }
-
-  void RaftTick()
-  {
-    m_expected++;
-    // A crashed node loses its volatile state: it restarts as a follower and
-    // catches up from whoever leads by then (Raft's crash recovery).
-    if (Acts(ADV_CRASH) && m_rfRole != RF_FOLLOWER)
-      {
-        m_rfRole = RF_FOLLOWER;
-        RfArmElection();
-      }
-    if (m_rfRole == RF_LEADER && !Acts(ADV_CRASH))
-      {
-        RfAppendUpTo(m_expected);
-        RfSendAppends();
-      }
-    m_roundEvent = Simulator::Schedule(m_roundInterval, &ConsensusApp::RaftTick, this);
-  }
-
-  void RfAppendUpTo(uint32_t r)
-  {
-    for (uint32_t i = m_rfLast + 1; i <= r; ++i)
-      if (m_oracle) m_oracle->NoteRoundOpened(i, TickNs(i));
-    m_rfLast = std::max(m_rfLast, r);
-    m_rfMatch[m_self] = m_rfLast;
-  }
-
-  void RfSendAppends()
-  {
-    for (uint32_t i = 0; i < m_n; ++i)
-      {
-        if (i == m_self) continue;
-        uint32_t first = m_rfNext[i];
-        uint32_t k = m_rfLast >= first ? m_rfLast - first + 1 : 0;
-        // Flow control (etcd's MaxSizePerMsg): at most m_rfCatchup entries per
-        // follower per tick, so a follower far behind is caught up over several
-        // ticks instead of in one burst through the leader's uplink.
-        if (m_rfCatchup && k > m_rfCatchup) k = m_rfCatchup;
-        uint32_t last = first + k - 1;                    // first - 1 for a heartbeat
-        std::vector<uint8_t> m = MakeMsg(MsgType(RF_APPEND), last, first, m_rfTerm, m_rfCommit, 0);
-        SendFrames(i, m, std::max<uint32_t>(1, k));
-        m_rfNext[i] = first + k;
-        m_sentPrePrepare++;
-      }
-    RfAdvanceCommit();
-  }
-
-  void RfArmElection()
-  {
-    m_rfElection.Cancel();
-    if (!m_vcEnabled) return;
-    Time t = m_viewTimeout * (1.0 + m_rfRng->GetValue(0.0, 1.0));
-    m_rfElection = Simulator::Schedule(t, &ConsensusApp::RfOnElection, this);
-  }
-
-  void RfStepDown(uint32_t term)
-  {
-    m_rfTerm = term;
-    m_rfRole = RF_FOLLOWER;
-    RfArmElection();
-  }
-
-  void RfOnElection()
-  {
-    if (m_rfRole == RF_LEADER) return;
-    if (Acts(ADV_CRASH) || Acts(ADV_WITHHOLD) || m_viewsEntered >= m_maxViews) { RfArmElection(); return; }
-    m_rfTerm++;
-    m_rfRole = RF_CANDIDATE;
-    m_rfVotedTerm = m_rfTerm;
-    m_rfVotes.clear();
-    m_rfVotes.insert(m_self);
-    m_viewsEntered++;
-    if (m_oracle && Trusted()) m_oracle->NoteViewChange(m_self, m_rfTerm);
-    std::vector<uint8_t> m = MakeMsg(MsgType(RF_REQVOTE), m_rfLast, 0, m_rfTerm, 0, m_vcSize);
-    for (uint32_t i = 0; i < m_n; ++i) SendFrames(i, m, 1);
-    m_sentViewChange++;
-    RfArmElection();                                 // a split vote retries
-  }
-
-  void RfBecomeLeader()
-  {
-    m_rfRole = RF_LEADER;
-    m_rfLeader = m_self;
-    m_rfElection.Cancel();
-    m_sentNewView++;
-    uint32_t had = m_rfLast;
-    RfAppendUpTo(m_expected);                         // requests that arrived leaderless
-    for (uint32_t i = 0; i < m_n; ++i) { m_rfNext[i] = had + 1; m_rfMatch[i] = 0; }
-    m_rfMatch[m_self] = m_rfLast;
-    RfSendAppends();
-  }
-
-  void RfAdvanceCommit()
-  {
-    std::vector<uint32_t> m = m_rfMatch;
-    std::sort(m.begin(), m.end(), std::greater<uint32_t>());
-    uint32_t c = m[Majority() - 1];
-    if (c > m_rfCommit) { m_rfCommit = c; RfApply(c); }
-  }
-
-  void RfApply(uint32_t c)
-  {
-    for (uint32_t r = m_rfApplied + 1; r <= c; ++r) CommitRound(r, 0);
-    m_rfApplied = std::max(m_rfApplied, c);
-  }
-
-  void RaftProcess(const Hdr& h)
-  {
-    switch (h.type)
-      {
-      case RF_APPEND:
-        {
-          if (h.view < m_rfTerm)
-            {
-              std::vector<uint8_t> a = MakeMsg(MsgType(RF_ACK), m_rfLast, 0, m_rfTerm, 0, 0);
-              SendFrames(h.sender, a, 1);
-              return;
-            }
-          if (h.view > m_rfTerm || m_rfRole != RF_FOLLOWER) RfStepDown(h.view);
-          m_rfLeader = h.sender;
-          RfArmElection();
-          uint32_t first = uint32_t(h.startNs);
-          bool ok = first <= m_rfLast + 1;
-          if (ok) m_rfLast = std::max(m_rfLast, h.round);
-          if (!Acts(ADV_WITHHOLD))
-            {
-              std::vector<uint8_t> a = MakeMsg(MsgType(RF_ACK), m_rfLast, 0, m_rfTerm, ok ? 1 : 0, 0);
-              SendFrames(h.sender, a, 1);
-              m_sentPrepare++;
-            }
-          RfApply(std::min(h.digest, m_rfLast));
-          m_rfCommit = std::max(m_rfCommit, std::min(h.digest, m_rfLast));
-          break;
-        }
-      case RF_ACK:
-        if (h.view > m_rfTerm) { RfStepDown(h.view); return; }
-        if (m_rfRole != RF_LEADER || h.view != m_rfTerm) return;
-        if (h.digest)
-          {
-            m_rfMatch[h.sender] = std::max(m_rfMatch[h.sender], h.round);
-            RfAdvanceCommit();
-          }
-        else
-          m_rfNext[h.sender] = h.round + 1;           // resent at the next tick
-        break;
-      case RF_REQVOTE:
-        if (h.view > m_rfTerm) RfStepDown(h.view);
-        if (h.view == m_rfTerm && m_rfVotedTerm != m_rfTerm && h.round >= m_rfLast &&
-            !Acts(ADV_WITHHOLD))
-          {
-            m_rfVotedTerm = m_rfTerm;
-            std::vector<uint8_t> v = MakeMsg(MsgType(RF_VOTE), m_rfLast, 0, m_rfTerm, 0, 0);
-            SendFrames(h.sender, v, 1);
-            m_sentPrepare++;
-            RfArmElection();
-          }
-        break;
-      case RF_VOTE:
-        if (m_rfRole == RF_CANDIDATE && h.view == m_rfTerm)
-          {
-            m_rfVotes.insert(h.sender);
-            if (m_rfVotes.size() >= Majority()) RfBecomeLeader();
-          }
-        break;
-      default: break;
-      }
-  }
-
   // ---- both ----------------------------------------------------------------------
 
   void RecordCommit(uint32_t round, RoundState& rs)
@@ -1235,7 +1023,7 @@ private:
         if (p->GetSize() < sizeof(Hdr)) continue;
         Hdr h;
         p->CopyData(reinterpret_cast<uint8_t*>(&h), sizeof(h));
-        if (h.type & CONT) continue;           // payload continuation (HotStuff, Raft)
+        if (h.type & CONT) continue;           // payload continuation (HotStuff)
         // A crashed node neither sends nor processes.
         if (Acts(ADV_CRASH)) continue;
         // Signature verification cost. Calibrate from your own testbed
@@ -1250,7 +1038,6 @@ private:
   void Process(Hdr h)
   {
     if (m_proto == PROTO_HOTSTUFF) { HsProcess(h); return; }
-    if (m_proto == PROTO_RAFT) { RaftProcess(h); return; }
     if (m_full) ProcessFull(h);
     else ProcessV1(h);
   }
@@ -1298,7 +1085,7 @@ private:
   int64_t  m_latSum{0}, m_latMax{0};
   std::vector<int64_t> m_latSamples;
 
-  // HotStuff and Raft
+  // HotStuff
   Proto    m_proto{PROTO_PBFT};
   int64_t  m_startNs{0};
   std::map<uint32_t, HsBlock> m_hsBlocks;
@@ -1306,13 +1093,6 @@ private:
   std::map<uint32_t, std::map<uint32_t, std::set<uint32_t>>> m_hsVotes;
   std::map<uint32_t, std::set<uint32_t>> m_hsNewViews;
   EventId  m_hsTimer;
-  RfRole   m_rfRole{RF_FOLLOWER};
-  uint32_t m_rfTerm{1}, m_rfVotedTerm{0}, m_rfLeader{0};
-  uint32_t m_rfLast{0}, m_rfCommit{0}, m_rfApplied{0}, m_rfCatchup{0};
-  std::vector<uint32_t> m_rfNext, m_rfMatch;
-  std::set<uint32_t> m_rfVotes;
-  EventId  m_rfElection;
-  Ptr<UniformRandomVariable> m_rfRng;
 
   TracedCallback<Time> m_commitTrace;
 };
@@ -1470,7 +1250,6 @@ int main(int argc, char* argv[])
   std::string consensusCsv = "";
   std::string pbftModel = "v1";
   std::string protocol = "pbft";
-  uint32_t raftCatchup = 0;
   bool     viewChange = true;
   Time     viewTimeout = Seconds(-1);   // negative: 4 x consensusInterval
   double   viewBackoff = 2.0;
@@ -1625,14 +1404,9 @@ int main(int argc, char* argv[])
                pbftModel);
   cmd.AddValue("protocol",
                "pbft (see --pbftModel) | hotstuff (chained, rotating leader, votes to the "
-               "next leader) | raft (crash faults only, fixed leader, elections). hotstuff "
-               "and raft use the full model's round clock, timeouts and oracle; "
-               "--viewTimeout is HotStuff's pacemaker timeout and Raft's election timeout",
+               "next leader). hotstuff uses the full model's round clock, timeouts and "
+               "oracle; --viewTimeout is its pacemaker timeout",
                protocol);
-  cmd.AddValue("raftCatchup",
-               "raft: entries per follower per tick, as etcd's flow control; a follower "
-               "that fell behind is caught up over several ticks. 0 = all at once",
-               raftCatchup);
   cmd.AddValue("viewChange", "full model: enable the view change", viewChange);
   cmd.AddValue("viewTimeout",
                "full model: time from a round's start until a backup that has not committed "
@@ -1830,11 +1604,9 @@ int main(int argc, char* argv[])
   Time beSlice   = NanoSeconds(beWindow.GetNanoSeconds() / consSlices);
   CheckWindowFeasibility("control (class 6)", rate, ctrlPayload, ctrlWindow);
   NS_ABORT_MSG_IF(pbftModel != "v1" && pbftModel != "full", "--pbftModel must be v1 or full");
-  NS_ABORT_MSG_IF(protocol != "pbft" && protocol != "hotstuff" && protocol != "raft",
-                  "--protocol must be pbft, hotstuff or raft");
-  NS_ABORT_MSG_IF(protocol == "raft" && (advBits & ADV_EQUIVOCATE),
-                  "Raft tolerates crash faults only: --attack=equivocate does not apply");
-  // HotStuff and Raft run on the full model's machinery.
+  NS_ABORT_MSG_IF(protocol != "pbft" && protocol != "hotstuff",
+                  "--protocol must be pbft or hotstuff");
+  // HotStuff runs on the full model's machinery.
   const bool fullModel = (pbftModel == "full") || protocol != "pbft";
   const std::string modelName = protocol == "pbft" ? pbftModel : protocol;
   if (viewTimeout < Time(0)) viewTimeout = consensusInterval * 4;
@@ -2135,11 +1907,6 @@ int main(int argc, char* argv[])
                             viewChangeSize, newViewSize);
           app->SetReproposeWindow(reproposeWindow);
           if (protocol == "hotstuff") app->SetProtocol(ConsensusApp::PROTO_HOTSTUFF);
-          if (protocol == "raft")
-            {
-              app->SetProtocol(ConsensusApp::PROTO_RAFT);
-              app->SetRaftCatchup(raftCatchup);
-            }
           app->SetOracle(oracle);
           if (byzantine.count(i))
             app->SetAdversary(advBits & ~ADV_INJECT, attackStart, attackStop, floodFactor,
@@ -2311,17 +2078,14 @@ int main(int argc, char* argv[])
   uint32_t rounds = consensusApps.empty() ? 0 : consensusApps[0]->GetRoundsOpened();
   uint32_t n = nValidators;
   // Normal case per round: PBFT 3 phases; HotStuff a proposal to all and a vote
-  // from each replica to the next leader; Raft an AppendEntries to each follower
-  // and an acknowledgement back.
+  // from each replica to the next leader.
   uint32_t expectedPerRound = protocol == "pbft" ? (n - 1) + (n - 1) * (n - 1) + n * (n - 1)
                                                  : 2 * (n - 1);
 
   std::cout << "\n=== consensus (class " << CLASS_CONSENSUS << ", n=" << n << ") ===\n"
             << "  rounds started      " << rounds << "\n"
-            << (protocol == "pbft" ? "  broadcasts  pre-prepare " : protocol == "hotstuff"
-                                                                ? "  sends       proposal (broadcast) "
-                                                                : "  sends       append-entries ")
-            << pp << (protocol == "pbft" ? "  prepare " : protocol == "hotstuff" ? "  vote " : "  ack/vote ")
+            << (protocol == "pbft" ? "  broadcasts  pre-prepare " : "  sends       proposal (broadcast) ")
+            << pp << (protocol == "pbft" ? "  prepare " : "  vote ")
             << pr << (protocol == "pbft" ? "  commit " : "  - ") << cm << "\n"
             << "  messages sent       " << msgs << "\n"
             << "  msgs/round actual   "
@@ -2356,12 +2120,6 @@ int main(int argc, char* argv[])
         std::cout << "  (pacemaker timeout " << viewTimeout.GetMicroSeconds() << " us, backoff "
                   << viewBackoff << "; view-change below = NEW-VIEW sends, new-view = "
                   << "proposals made on NEW-VIEWs)";
-      else if (protocol == "raft")
-        std::cout << "  (election timeout " << viewTimeout.GetMicroSeconds() << "-"
-                  << 2 * viewTimeout.GetMicroSeconds() << " us, catch-up "
-                  << (raftCatchup ? std::to_string(raftCatchup) + " entries/tick" : std::string("unlimited"))
-                  << "; view-change below = elections started, new-view = elections won, "
-                  << "views = terms)";
       else if (fullModel)
         std::cout << "  (view change " << (viewChange ? "on" : "off")
                   << ", timeout " << viewTimeout.GetMicroSeconds() << " us, backoff "
@@ -2413,15 +2171,13 @@ int main(int argc, char* argv[])
   auto printAgreement = [&]() {
       if (oracle)
         {
-          // Quorum: 2f+1 of n = 3f+1 for the Byzantine protocols, a majority for Raft.
-          uint32_t q = protocol == "raft" ? n / 2 + 1 : 2 * ((n - 1) / 3) + 1;
+          // Quorum: 2f+1 of n = 3f+1.
+          uint32_t q = 2 * ((n - 1) / 3) + 1;
           std::cout << "  rounds opened       " << oracle->RoundsOpened() << "\n"
                     << "  rounds with commit  " << oracle->RoundsWithAnyCommit()
                     << "  (any trusted node)\n"
                     << "  rounds quorum-done  " << oracle->QuorumComplete(q)
-                    << (protocol == "raft" ? "  (a majority of trusted nodes, same entry; crash-only "
-                                             "nodes are trusted)\n"
-                                           : "  (2f+1 trusted nodes, same digest; crash-only nodes are trusted)\n")
+                    << "  (2f+1 trusted nodes, same digest; crash-only nodes are trusted)\n"
                     << "  safety violations   " << oracle->SafetyViolations() << "\n"
                     << (reproposeWindow > 0
                             ? "  rounds abandoned    " + std::to_string(oracle->RoundsAbandoned(q)) +
@@ -2453,7 +2209,7 @@ int main(int argc, char* argv[])
       std::cout << "\n=== adversary ===\n"
                 << "  attack              " << AttackName(advBits) << "\n"
                 << "  byzantine           " << byzantine.size() << " of " << n << " (f = "
-                << (n ? (protocol == "raft" ? (n - 1) / 2 : (n - 1) / 3) : 0) << ")  select " << byzSelect << "  ids "
+                << (n ? (n - 1) / 3 : 0) << ")  select " << byzSelect << "  ids "
                 << (byzantine.empty() ? "-" : who.str()) << "\n"
                 << "  window              [" << attackStart.GetSeconds() << " s, "
                 << attackStop.GetSeconds() << " s)\n"

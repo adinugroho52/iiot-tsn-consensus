@@ -16,9 +16,9 @@
 #      contrib/tsn at a fixed commit (or from a clone you name);
 #   3. copies this repository into the ns-3 tree, configures and builds;
 #   4. runs the scenario checks: tools/adversary_check.sh (30 PBFT checks) and
-#      tools/protocol_check.sh (29 HotStuff and Raft checks);
-#   5. runs the sweep, tools/fault_sweep.sh, over the chosen sets (329 cells for
-#      the full paper, about 7 h on one core; -j N runs N cells at a time);
+#      tools/protocol_check.sh (17 HotStuff checks);
+#   5. runs the sweep, tools/fault_sweep.sh, over the chosen sets (211 cells for
+#      the full paper, about 5 h on one core; -j N runs N cells at a time);
 #   6. assembles every table and figure with tools/assemble_results.py;
 #   7. compares with the reference (tools/compare_paper2.py): control isolation
 #      and safety in every cell, each cell's outcome and recovery-rule
@@ -26,8 +26,8 @@
 #   8. packs the results into WORK/paper2-repro-results.tar.gz (a few MB).
 #
 # The reference was produced with the defaults below: ns-3.49, TAS module commit
-# 3d00954. The model is deterministic (Raft's election timeouts are seeded by
-# the run number), so a matching build reproduces it exactly.
+# 3d00954. The model is deterministic, so a matching build reproduces it
+# exactly.
 #
 # Usage:
 #   tools/verify_paper2.sh [options]
@@ -40,12 +40,21 @@
 #   --tas-src DIR     use an existing TAS clone instead of cloning one
 #   --profile P       ns-3 build profile (default: ns-3's own default)
 #   -j N              cells run in parallel by the sweep (default 1)
-#   --sets "S ..."    run only these sets (default: f1 f2 f3 f4 f5 p1 p2 v1 v1s);
+#   --sets "S ..."    run only these sets (default: f1 f2 f3 f4 f5 p1 p2 v1);
 #                     a partial run checks cells only, not the tables
-#   --quick           the same as --sets "f1 p1 v1": 89 cells, about 2 h serially
+#   --quick           the same as --sets "f1 p1 v1": 70 cells, about 2 h serially
 #   --skip-checks     skip step 4 (the scenario checks, about 15 min)
 #   --check-only      skip steps 2-5: assemble, compare and pack what is
 #                     already in --work
+#   --python PATH     the Python interpreter for every Python step, e.g. a
+#                     virtual environment's bin/python3 (default: python3 on
+#                     the PATH); no need to activate the environment
+#   --figures         require matplotlib and stop at step 1 without it. By
+#                     default the figures are optional: without matplotlib the
+#                     tables are still built and checked, the figures are not
+#                     drawn. They are not needed to verify the results, since
+#                     the comparison covers every number they are drawn from.
+#                     To draw them: pip install -r tools/requirements-paper2.txt
 #
 # Rerunning the script resumes: the build is reused and finished cells are
 # skipped (fault_sweep.sh marks each with log/<cell>.done).
@@ -66,16 +75,16 @@ PROFILE=""
 WORK=""
 REPO=""
 JOBS=1
-ALL_SETS="f1 f2 f3 f4 f5 p1 p2 v1 v1s"
+ALL_SETS="f1 f2 f3 f4 f5 p1 p2 v1"
 SETS_ARG="$ALL_SETS"
 SKIP_CHECKS=0
 CHECK_ONLY=0
-# The registered predictions of v1, hashed when they were registered (before
-# the v1 runs). A changed file means the validation is no longer the one the
-# paper reports.
-V1_SHA256="0b1d7df59c06a451ced87a095ffb77dcb8025abcb3c17daab38bc3b4b8fcf57f"
+PY=python3
+FIGURES=0
+# The registered predictions of v1 (after the Raft drop)
+V1_SHA256="97c20de3318c24b366a84a430cf6649438f19532e8ebb5996bfc93bc351f0da4"
 ADV_EXPECT=30
-PROTO_EXPECT=29
+PROTO_EXPECT=17
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$here/../scratch/iiot-consensus-tsn.cc" ]] && REPO="$(cd "$here/.." && pwd)"
@@ -96,6 +105,8 @@ while [[ $# -gt 0 ]]; do
     --quick)        SETS_ARG="f1 p1 v1"; shift ;;
     --skip-checks)  SKIP_CHECKS=1; shift ;;
     --check-only)   CHECK_ONLY=1; shift ;;
+    --python)       PY="$2"; shift 2 ;;
+    --figures)      FIGURES=1; shift ;;
     -h|--help)      sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown option $1 (see --help)" ;;
   esac
@@ -137,7 +148,7 @@ echo "sets        ${SETS[*]}$( [[ $FULL -eq 1 ]] && echo ' (the full paper)' || 
 
 # ref_cells : the reference cells of the chosen sets, sorted, one per line
 ref_cells() {
-  python3 -I - "$REF/all_cells.csv" "${SETS[@]}" <<'EOF'
+  "$PY" -I - "$REF/all_cells.csv" "${SETS[@]}" <<'EOF'
 import csv, sys
 sets = set(sys.argv[2:])
 with open(sys.argv[1], newline="") as f:
@@ -148,12 +159,24 @@ EOF
 
 # --- 1. static checks ------------------------------------------------------------
 step "1. static checks"
-command -v python3 >/dev/null || die "python3 is not installed"
-if python3 -I -c 'import matplotlib' 2>/dev/null; then
-  echo "ok       python3 and matplotlib"
+PY_PATH="$(command -v "$PY")" || die "no Python interpreter $PY (see --python)"
+# The sweep and the checks call python3 by name: put this interpreter's folder
+# first, so a virtual environment given with --python is used throughout.
+PATH="$(dirname "$PY_PATH"):$PATH"; export PATH
+MPL="$("$PY" -I -c 'import matplotlib; print(matplotlib.__version__)' 2>/dev/null)"
+if [[ -n "$MPL" ]]; then
+  echo "ok       $PY_PATH ($("$PY" --version 2>&1)), matplotlib $MPL: figures will be drawn"
+elif [[ $FIGURES -eq 1 ]]; then
+  die "--figures: matplotlib is not available to $PY_PATH (pip install -r tools/requirements-paper2.txt, or --python <venv>/bin/python3)"
 else
-  echo "note     matplotlib is missing: tables are checked, figures will not be drawn (pip install matplotlib)"
+  echo "note     $PY_PATH has no matplotlib: the tables are built and checked, the figures are not drawn (optional; --figures requires them)"
 fi
+# Which interpreter assembled the results: written on every run, --check-only
+# included, since that is the step that draws the figures.
+{
+  echo "python      $PY_PATH ($("$PY" --version 2>&1))"
+  echo "matplotlib  ${MPL:-not installed (figures not drawn)}"
+} > "$WORK/python.txt"
 v1="$REPO/tools/validation/v1_cells.csv"
 [[ -f "$v1" ]] || die "no registered predictions at $v1"
 got="$(sha256sum "$v1" | cut -d' ' -f1)"
@@ -252,8 +275,6 @@ if [[ $CHECK_ONLY -eq 0 ]]; then
     echo "cpu         $(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2- | sed 's/^ //')"
     echo "compiler    $(g++ --version | head -1)"
     echo "cmake       $(cmake --version | head -1)"
-    echo "python      $(python3 --version 2>&1)"
-    echo "matplotlib  $(python3 -I -c 'import matplotlib; print(matplotlib.__version__)' 2>/dev/null || echo 'not installed')"
     echo "ns-3        $NS3_TAG $(git -C "$NS3_DIR" rev-parse HEAD 2>/dev/null || echo 'commit unknown')"
     echo "profile     ${PROFILE:-ns-3 default}"
     echo "repository  $(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo 'not a git checkout') $( [[ -n "$(git -C "$REPO" status --porcelain 2>/dev/null)" ]] && echo '(uncommitted changes)')"
@@ -314,23 +335,23 @@ fi
 # --- 6. assemble ----------------------------------------------------------------------------
 step "6. assembling tables and figures"
 rm -rf "$PAPER"
-python3 -I "$REPO/tools/assemble_results.py" "$RES/summary.csv" --csvdir "$RES/csv" \
+"$PY" -I "$REPO/tools/assemble_results.py" "$RES/summary.csv" --csvdir "$RES/csv" \
   --registered "$REPO/tools/validation/v1_cells.csv" --out "$PAPER" > "$WORK/assemble.log" 2>&1 \
   || die "assemble_results.py failed, see $WORK/assemble.log"
 echo "ok       $PAPER ($(ls "$PAPER"/table_*.csv 2>/dev/null | wc -l) tables, $(ls "$PAPER"/fig_*.pdf 2>/dev/null | wc -l) figures)"
 
 # --- 7. compare -------------------------------------------------------------------------------
 step "7. comparing with the reference"
-cmp_args=(check "$PAPER" "$REF")
+cmp_args=(check "$PAPER" "$REF" --csvdir "$RES/csv")
 [[ $FULL -eq 1 ]] || cmp_args+=(--sets "${SETS[@]}")
-python3 -I "$REPO/tools/compare_paper2.py" "${cmp_args[@]}" | tee "$WORK/comparison.txt"
+"$PY" -I "$REPO/tools/compare_paper2.py" "${cmp_args[@]}" | tee "$WORK/comparison.txt"
 [[ ${PIPESTATUS[0]} -eq 0 ]] || status=1
 
 # --- 8. pack ----------------------------------------------------------------------------------
 step "8. packing the results"
 PACK="$WORK/pack/paper2-repro-results"
 rm -rf "$WORK/pack"; mkdir -p "$PACK"
-for f in environment.txt tas.txt configure.log adversary_check.log protocol_check.log assemble.log comparison.txt; do
+for f in environment.txt python.txt tas.txt configure.log adversary_check.log protocol_check.log assemble.log comparison.txt; do
   [[ -f "$WORK/$f" ]] && cp "$WORK/$f" "$PACK/"
 done
 [[ -f "$WORK/build.log" ]] && tail -n 200 "$WORK/build.log" > "$PACK/build-tail.log"
@@ -346,7 +367,14 @@ rm -rf "$WORK/pack"
 echo "archive: $WORK/paper2-repro-results.tar.gz ($(du -h "$WORK/paper2-repro-results.tar.gz" | cut -f1))"
 echo "the per-round CSVs stay in $RES/csv; the archive holds their checksums"
 [[ -f "$WORK/environment.txt" ]] && { echo; cat "$WORK/environment.txt"; }
+cat "$WORK/python.txt"
 echo
+n_fig=$(ls "$PAPER"/fig_*.pdf 2>/dev/null | wc -l)
+if [[ $n_fig -gt 0 ]]; then
+  echo "figures: $n_fig drawn in $PAPER"
+else
+  echo "figures: not drawn (optional; the comparison covers the data they are drawn from)"
+fi
 if [[ $status -eq 0 ]]; then
   echo "result: the second paper's results are reproduced"
 else

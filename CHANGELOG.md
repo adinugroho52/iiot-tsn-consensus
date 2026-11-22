@@ -107,3 +107,38 @@ rest are renumbered to match the paper. Runs, flags and results are unchanged; o
 - `tools/compare_reference.py`, run without set names, lists only first-paper sets, so it skips `reference/paper2/`.
 - `fault_sweep.sh`: sets `p2` and `p3` merged into one set, `p2` (55 cells). The 32 cells of `p3` are now named `p2-*`; four of them (HotStuff at k = 4: crash with timeouts 2 and 4, equivocate, flood2) ran exactly the same command as a `p2` cell and are dropped. Every remaining command is unchanged, so no result changes; the paper now has 329 cells. The rule's scores no longer count those four twice: 194/214 overall and 161/178 held out with beta fitted on f1 (was 197/218, 164/182), 197/214 and 162/178 fitted on f4 (was 199/218, 164/182); the fitted betas and the registered validation are unchanged.
 - This is the codebase and results behind the second paper, v1.x results still reproduce with `--pbftModel=v1`
+
+## Unreleased
+
+Raft is removed: the second paper studies the Byzantine-fault-tolerant protocols, PBFT and HotStuff. PBFT and HotStuff
+are unchanged, and every remaining cell runs the same command as before.
+
+- Simulator: `--protocol=raft` and `--raftCatchup` are removed, with the Raft model (leader, elections, AppendEntries,
+  catch-up limit) and its report lines. `--protocol` takes `pbft` or `hotstuff`. The Raft model drew its election
+  timeouts from its own random streams (1000 + node), created only in Raft runs, so no PBFT or HotStuff run changes.
+- `fault_sweep.sh`: `p1` (9 cells) and `p2` (31 cells) hold PBFT and HotStuff only, and the Raft seed set `v1s` is gone.
+  `v1` runs the 25 PBFT and HotStuff cells of the registered file. The file itself is unchanged, its 15 Raft rows
+  included, since its SHA-256 is the registration; `fault_sweep.sh` and `recovery_rule.py` skip those rows.
+- `vc_budget.py`, `recovery_rule.py`, `fault_report.py`: Raft load, burst and latency models removed. The rule's PBFT and
+  HotStuff predictions are unchanged: `validation_design.py`, with its Raft groups removed, writes exactly the 25 PBFT
+  and HotStuff rows of the registered file.
+- `protocol_check.sh`: the four Raft scenarios (12 checks) are removed; 5 HotStuff scenarios, 17 checks.
+- `tools/seed_study.py` (the Raft seed study) is removed.
+- `assemble_results.py`: the rule table reports the registered set for PBFT, HotStuff and both together (17/20
+  decisive, 5/5 in the band); development scores 169/186 (beta fitted on f1) and 172/186 (on f4).
+- `verify_paper2.sh` checks 211 cells (`f1`-`f5`, `p1`, `p2`, `v1`) and 17 protocol checks. `tools/reference/paper2/`
+  is the 2.0.0 reference without its Raft cells, cut without rerunning, with its tables rebuilt.
+- `docs/PAPER2.md` and the README describe PBFT and HotStuff only.
+- `tools/validation/v1_cells.csv`: the 15 Raft rows are removed. The remaining 25 rows are byte-identical to the file registered before the v1 runs (commit 3002952, SHA-256 0b1d7df5…cf57f); new SHA-256 97c20de3…0da4, which validation_design.py reproduces.
+- `tools/reference/paper2/rounds-sha256.txt`: the SHA-256 of every cell's per-round CSV (211), from the authors' rerun
+  after the Raft removal. `compare_paper2.py --csvdir` checks them, so the data behind the timeline figure are verified
+  too; `verify_paper2.sh` passes the sweep's `csv/` folder.
+- `verify_paper2.sh`: figures are optional. Without matplotlib it builds and checks the tables and says the figures were
+  not drawn; `--figures` makes matplotlib required (checked at step 1, before anything is built), and `--python PATH`
+  runs every Python step with that interpreter, e.g. a virtual environment's, without activating it. `python.txt`
+  records the interpreter and matplotlib version on every run, `--check-only` included; `environment.txt` no longer
+  does.
+- `tools/requirements-paper2.txt`: matplotlib 3.11.2, the version that drew the paper's figures. `docs/PAPER2.md`
+  shows how to set up an environment with it.
+- `docs/PAPER2.md`: the registered-validation section says how the 25-row file derives from the one registered before
+  the v1 runs (commit `3002952`, 40 cells).

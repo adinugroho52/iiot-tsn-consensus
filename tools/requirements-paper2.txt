@@ -1,0 +1,8 @@
+# Python packages for tools/verify_paper2.sh and tools/assemble_results.py.
+# Only the figures need them; the tables and the comparison use the standard
+# library. matplotlib 3.11.2 drew the figures of the paper (numpy comes with it).
+#
+#   python3 -m venv ~/venvs/paper2
+#   ~/venvs/paper2/bin/pip install -r tools/requirements-paper2.txt
+#   tools/verify_paper2.sh --python ~/venvs/paper2/bin/python3
+matplotlib==3.11.2

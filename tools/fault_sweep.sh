@@ -9,7 +9,7 @@
 #     tools/fault_sweep.sh -j 4 f1         # one set, four jobs in parallel
 #     tools/fault_sweep.sh --dry-run f2    # print the commands only
 #
-# Every cell starts from one of E15's configurations of the first paper (the
+# Every cell starts from one of E12's configurations of the first paper (the
 # counting rule at its edge) and runs the full PBFT model for 6 s; a fault, when
 # there is one, lasts from 1.0 s to 2.5 s, which leaves 3.4 s to see whether
 # the network recovers or keeps changing views on its own.
@@ -37,22 +37,15 @@
 #   f5  headroom vs committee size (38 cells): n = 7, 10, 13 at 1 Gbps, 4 ms
 #       rounds, crash and equivocation with every held round re-proposed. Does
 #       the f4 threshold (as a share of the load) carry over?
-#   p1  protocols, no fault (13 cells): PBFT, chained HotStuff and Raft at n = 16
-#       (E15's 1 Gbps network, 4 ms rounds) with the consensus window cut to
+#   p1  protocols, no fault (9 cells): PBFT and chained HotStuff at n = 16
+#       (E12's 1 Gbps network, 4 ms rounds) with the consensus window cut to
 #       around each protocol's own load: the smallest window each needs.
-#   p2  protocols under faults (55 cells): chained HotStuff with its window at
+#   p2  HotStuff under faults (31 cells): chained HotStuff with its window at
 #       8 to 32 frames per round (-50% to +100% spare over its worst round, 16
-#       frames, which binds; p1), and Raft at 16 to 24 frames (7-60% spare over
-#       its 15), under the triggers of f1-f4; Raft also with its catch-up limited
-#       to 2 or 4 entries per follower per tick (etcd-style flow control).
-#   v1  validation (40 cells): configurations no earlier set used, with the
+#       frames, which binds; p1), under the triggers of f1-f4.
+#   v1  validation (25 cells): configurations no earlier set used, with the
 #       recovery rule's predictions registered in tools/validation/v1_cells.csv
-#       before the runs (tools/validation_design.py). Only run by name.
-#   v1s Raft seeds (75 cells): the 15 Raft cells of v1 with --run=1..5. Raft's
-#       election timeouts are random, so one run per cell is one draw. Seed 1
-#       repeats v1 exactly. A stochasticity study, not a rescoring of v1.
-#       Only run by name.
-#
+#       before the runs (tools/validation_design.py).
 set -uo pipefail
 
 NS3="${NS3:-./ns3}"
@@ -65,8 +58,8 @@ while [[ $# -gt 0 ]]; do
     -j) JOBS="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
     -h|--help) sed -n '2,36p' "$0"; exit 0 ;;
-    f1|f2|f3|f4|f5|p1|p2|v1|v1s) SETS+=("$1"); shift ;;
-    *) echo "unknown argument: $1 (sets are f1 f2 f3 f4 f5 p1 p2 v1 v1s)" >&2; exit 2 ;;
+    f1|f2|f3|f4|f5|p1|p2|v1) SETS+=("$1"); shift ;;
+    *) echo "unknown argument: $1 (sets are f1 f2 f3 f4 f5 p1 p2 v1)" >&2; exit 2 ;;
   esac
 done
 [[ ${#SETS[@]} -eq 0 ]] && SETS=(f1 f2 f3 f4 f5 p1 p2)   # v1 only by name
@@ -81,7 +74,7 @@ fi
 COLS="cell,set,config,attack,timeout_rounds,window,pred_C,pred_M,pred_Mflood,pred_B,pred_wait_ms,pred_wait3_ms,pred_drain_rounds,prediction,views_entered,max_view,view_changes,new_views,rounds_opened,quorum_done,abandoned,safety,stall_us,cons_peak,cons_peak_port,cons_drops,ctrl_drops,commit_p50_us,commit_p99_us,commit_max_us,msgs_per_round,ctrl_missed,ctrl_p99_us,ctrl_p99_during_us,ctrl_p99_outside_us,escalations,view_cap_nodes,wall_s"
 [[ -f "$SUMMARY" || $DRY -eq 1 ]] || echo "$COLS" > "$SUMMARY"
 
-# --- configurations: E15 of the first paper ----------------------------------
+# --- configurations: E12 of the first paper (E15 before v1.2.0) ----------------------------------
 # name | simulator flags | vc_budget.py flags | round interval (ms)
 E15_1G="--linkRate=1Gbps --nSwitches=4 --nValidators=16 --consensusMsgSize=1024"
 E15_100M="--linkRate=100Mbps --consFrac=0.60 --nSwitches=8 --nValidators=10 --consensusMsgSize=1024 --consSlices=1"
@@ -282,12 +275,12 @@ fi
 # --- p1, p2: the protocol comparison -------------------------------------------------
 # Busiest-link load per round at n = 16 (tools/vc_budget.py --protocol ...):
 #   PBFT 128 (middle trunk, all-to-all), HotStuff 8 on average over the leader
-#   rotation (16 in the worst single round), Raft 15 (the leader's access link).
+#   rotation (16 in the worst single round).
 # The window passes k frames per cycle, C = 4k per 4 ms round; W = k x 8.432 + 4 us.
 pcell() {  # pcell <set> <protocol> <k> <attack> <timeout rounds|-> <extra sim flags> <vc_budget extra|""> [name suffix]
   local set="$1" proto="$2" k="$3" atk="$4" tr="$5" extra="$6" pextra="$7" sfx="${8:-}"
   local frac; frac=$(awk -v k="$k" 'BEGIN{printf "%.4f", (k * 8.432 + 4) / 1000}')
-  local tag; case "$proto" in pbft) tag=pbft ;; hotstuff) tag=hs ;; raft) tag=raft ;; esac
+  local tag; case "$proto" in pbft) tag=pbft ;; hotstuff) tag=hs ;; esac
   local name="${tag}k${k}${sfx}t4"
   local flags="$E15_1G --consFrac=$frac --consensusInterval=4ms --protocol=$proto"
   local tflag="" tname="" pt=""
@@ -304,19 +297,14 @@ if wants p1; then
   echo "== p1: protocols, no fault, window cut to each protocol's load"
   for k in 31 32 33 35; do pcell p1 pbft "$k" none - "" "--no-fault" ; done
   for k in 1 2 3 4 35; do pcell p1 hotstuff "$k" none - "" "--no-fault" ; done
-  for k in 3 4 5 35; do pcell p1 raft "$k" none - "" "--no-fault" ; done
   wait
 fi
 
 # p2. HotStuff: C = 8 to 32 (k = 2..8) is -50% to +100% spare over its worst
 # round. A no-fault run at a short timeout (half a round) checks whether the
 # timeout alone starts a storm where the window is tight (k <= 4).
-# Raft: C = 16, 20, 24 over a load of 15, with unlimited catch-up and with a
-# follower that fell behind given at most L entries per tick; the leader's
-# uplink then carries 15 + (L - 1) frames per round while it catches up, which
-# fits C = 16 at L = 2 and C = 20 at L <= 6.
 if wants p2; then
-  echo "== p2: protocols under faults"
+  echo "== p2: HotStuff under faults"
   for k in 2 3 4 5 6 7 8; do
     pcell p2 hotstuff "$k" crash 4 "--attack=crash $WIN" "--crash 0"
     pcell p2 hotstuff "$k" crash 2 "--attack=crash $WIN" "--crash 0"
@@ -324,34 +312,6 @@ if wants p2; then
     pcell p2 hotstuff "$k" flood2 - "--attack=flood --byzSelect=last --floodFactor=2 $WIN" ""
     pcell p2 hotstuff "$k" equivocate - "--attack=equivocate $WIN" "--crash="
   done
-  for k in 4 5 6; do
-    pcell p2 raft "$k" crash 4 "--attack=crash $WIN" "--crash 0"
-    pcell p2 raft "$k" crash 2 "--attack=crash $WIN" "--crash 0"
-    pcell p2 raft "$k" none 0.5 "" ""
-    pcell p2 raft "$k" flood2 - "--attack=flood --byzSelect=last --floodFactor=2 $WIN" ""
-    for L in 2 4; do
-      pcell p2 raft "$k" crash 4 "--attack=crash $WIN --raftCatchup=$L" "--crash 0" "c$L"
-      pcell p2 raft "$k" crash 2 "--attack=crash $WIN --raftCatchup=$L" "--crash 0" "c$L"
-    done
-  done
-  wait
-fi
-
-# --- v1s: the Raft validation cells under five seeds -------------------------------------
-if wants v1s; then
-  echo "== v1s: Raft validation cells, seeds 1-5"
-  REG="$TOOLS/validation/v1_cells.csv"
-  [[ -f "$REG" ]] || { echo "missing $REG" >&2; exit 1; }
-  while IFS='|' read -r cell set cfg atk tr win fl; do
-    for seed in 1 2 3 4 5; do
-      launch "v1s-${cell#v1-}-r$seed" v1s "$cfg" "$atk" "$tr" "$win" "" "$fl --run=$seed"
-    done
-  done < <(python3 -I -c '
-import csv, sys
-for r in csv.DictReader(open(sys.argv[1])):
-    if r["config"].startswith("raft"):
-        print("|".join([r["cell"], r["set"], r["config"], r["attack"], r["timeout_rounds"], r["window"], r["flags"]]))
-' "$REG")
   wait
 fi
 

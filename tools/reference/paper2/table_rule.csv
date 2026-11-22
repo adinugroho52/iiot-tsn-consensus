@@ -1,8 +1,6 @@
 Evaluation,beta,Held out / decisive,All / band
-beta fitted on f1,0.95,161/178,194/214
-beta fitted on f4,0.85,162/178,197/214
+beta fitted on f1,0.95,136/150,169/186
+beta fitted on f4,0.85,137/150,172/186
 "v1 registered, pbft",0.90,11/12 decisive,5/5 band
 "v1 registered, hotstuff",0.90,6/8 decisive,0/0 band
-"v1 registered, raft",0.90,8/13 decisive,2/2 band
-"v1 registered, all",0.90,25/33 decisive,7/7 band
-"v1s Raft, 5 seeds",0.90,10/15 majority,4/15 split
+"v1 registered, all",0.90,17/20 decisive,5/5 band

@@ -25,7 +25,6 @@ import csv
 import io
 import math
 import os
-import re
 import sys
 import zlib
 from collections import defaultdict
@@ -39,6 +38,7 @@ BETA = 0.9
 BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
 INK, INK2, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 FAIL = ("storm", "stuck")
+PROTOCOLS = ("pbft", "hotstuff")
 
 
 def classify(summary):
@@ -108,7 +108,7 @@ def t1_protocols(cells, out):
     if not p1:
         return "T1 skipped: no p1 cells"
     body = []
-    for proto in ("pbft", "hotstuff", "raft"):
+    for proto in PROTOCOLS:
         mine = sorted((c for c in p1 if c["protocol"] == proto), key=lambda c: c["C"])
         if not mine:
             continue
@@ -184,6 +184,7 @@ def t3_grid(cells, out):
 def t4_rule(cells, out, registered):
     body = []
     outcomes = {c["cell"]: c["outcome"] for c in cells}
+    # Development cells: every cell outside the registered validation.
     parsed = {c["cell"]: rr.parse_cell(c["cell"]) for c in cells if not c["set"].startswith("v1")}
     for fit in ("f1", "f4"):
         fitset = {fit}
@@ -197,13 +198,14 @@ def t4_rule(cells, out, registered):
         r_h, t_h = rr.score(held, outcomes, best)
         body.append([f"beta fitted on {fit}", f"{best:.2f}", f"{r_h}/{t_h}", f"{r_all}/{t_all}"])
     if registered and os.path.isfile(registered):
-        reg = list(csv.DictReader(open(registered)))
-        for proto in ("pbft", "hotstuff", "raft", "all"):
+        reg = [r for r in csv.DictReader(open(registered))]
+        groups = [("pbft", ("pbft",)), ("hotstuff", ("hotstuff",)), ("all", PROTOCOLS)]
+        for label, protos in groups:
             dec = [0, 0]
             band = [0, 0]
             for r in reg:
                 p = rr.parse_cell(r["cell"])["protocol"]
-                if (proto != "all" and p != proto) or r["cell"] not in outcomes:
+                if p not in protos or r["cell"] not in outcomes:
                     continue
                 actual = "fail" if outcomes[r["cell"]].startswith(FAIL) else "ok"
                 m = num(r["margin"])
@@ -211,18 +213,8 @@ def t4_rule(cells, out, registered):
                 k[0] += r["prediction"] == actual
                 k[1] += 1
             if dec[1] + band[1]:
-                body.append([f"v1 registered, {proto}", "0.90", f"{dec[0]}/{dec[1]} decisive",
+                body.append([f"v1 registered, {label}", "0.90", f"{dec[0]}/{dec[1]} decisive",
                              f"{band[0]}/{band[1]} band"])
-    seeds = defaultdict(list)
-    for c in cells:
-        if c["set"] == "v1s":
-            seeds[re.sub(r"-r\d+$", "", c["cell"])].append(c["failed"] == "1")
-    if seeds and registered and os.path.isfile(registered):
-        pred = {r["cell"][3:]: r["prediction"] for r in csv.DictReader(open(registered))}
-        agree = sum(("fail" if sum(v) >= 3 else "ok") == pred.get(k[4:], "?") for k, v in seeds.items())
-        split = sum(0 < sum(v) < len(v) for v in seeds.values())
-        body.append(["v1s Raft, 5 seeds", "0.90", f"{agree}/{len(seeds)} majority",
-                     f"{split}/{len(seeds)} split"])
     if not body:
         return "T4 skipped"
     write_table(out, "rule", ["Evaluation", "beta", "Held out / decisive", "All / band"], body,
@@ -338,9 +330,9 @@ def fig_protocols(plt, cells, out):
     p1 = [c for c in cells if c["set"] == "p1"]
     if not p1:
         return "protocols skipped: no p1 cells"
-    names = {"pbft": "PBFT", "hotstuff": "HotStuff", "raft": "Raft"}
+    names = {"pbft": "PBFT", "hotstuff": "HotStuff"}
     rows = []
-    for proto in ("pbft", "hotstuff", "raft"):
+    for proto in PROTOCOLS:
         mine = [c for c in p1 if c["protocol"] == proto]
         if not mine:
             continue
@@ -348,7 +340,7 @@ def fig_protocols(plt, cells, out):
         wide = max(mine, key=lambda c: c["C"])
         rows.append((names[proto], min(c["C"] for c in ok) if ok else float("nan"),
                      num(wide["commit_p50_us"]) / 1000))
-    fig, axes = plt.subplots(1, 2, figsize=(3.5, 1.6), gridspec_kw={"wspace": 0.15})
+    fig, axes = plt.subplots(1, 2, figsize=(3.5, 0.6 + 0.35 * len(rows)), gridspec_kw={"wspace": 0.15})
     for ax, k, title, unit in ((axes[0], 1, "Window needed", "frames per round"),
                                (axes[1], 2, "Commit latency", "p50, wide window (ms)")):
         vals = [r[k] for r in rows]
@@ -379,11 +371,11 @@ def fig_rule(plt, cells, out, registered):
     val = [c for c in cells if c["rule_margin"] and c["cell"] in reg]
     if not dev and not val:
         return "rule skipped"
-    rows = ["pbft", "hotstuff", "raft"]
-    names = {"pbft": "PBFT", "hotstuff": "HotStuff", "raft": "Raft"}
+    rows = list(PROTOCOLS)
+    names = {"pbft": "PBFT", "hotstuff": "HotStuff"}
     panels = [(dev, "Development cells (f1-p2)"), (val, "Registered validation (v1)")]
     panels = [p for p in panels if p[0]]
-    fig, axes = plt.subplots(1, len(panels), figsize=(7.16, 2.0), sharey=True,
+    fig, axes = plt.subplots(1, len(panels), figsize=(7.16, 1.7), sharey=True,
                              gridspec_kw={"wspace": 0.06,
                                           "width_ratios": [2, 1] if len(panels) > 1 else [1]})
     axes = axes if len(panels) > 1 else [axes]
@@ -406,9 +398,9 @@ def fig_rule(plt, cells, out, registered):
         else:
             ax.set_xlim(0.5, 1.5)
             ax.set_xlabel("Predicted wait / timeout")
-    axes[0].set_yticks(range(3))
+    axes[0].set_yticks(range(len(rows)))
     axes[0].set_yticklabels([names[r] for r in rows])
-    axes[0].set_ylim(2.55, -0.55)
+    axes[0].set_ylim(len(rows) - 0.45, -0.55)
     import matplotlib.patches as mpatches
     h = [axes[0].scatter([], [], marker="x", color=ORANGE, lw=1.2, label="ran: storm or stuck"),
          axes[0].scatter([], [], marker="o", facecolor="white", edgecolor=BLUE, lw=1.1,

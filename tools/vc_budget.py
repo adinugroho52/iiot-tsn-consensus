@@ -114,14 +114,6 @@ def hs_round(n, sw, v, live):
     return load
 
 
-def rf_round(n, sw, leader, live):
-    """Raft: AppendEntries leader -> each follower, acknowledgement back."""
-    load = {}
-    to_all(load, leader, n, sw)
-    unicast(load, [i for i in live if i != leader], leader, n, sw)
-    return load
-
-
 def sustained(loads):
     """Per link, the mean over a rotation of rounds; the busiest link's mean."""
     links = set().union(*loads)
@@ -131,36 +123,24 @@ def sustained(loads):
 
 
 def other_protocol(a, n, sw, C, T, vto):
-    """C5 and a first-burst estimate for hotstuff and raft (same verdict rules)."""
+    """C5 and a first-burst estimate for chained HotStuff (same verdict rules as PBFT)."""
     dead = {int(x) for x in a.crash.split(",") if x != ""}
     live = [i for i in range(n) if i not in dead]
-    if a.protocol == "hotstuff":
-        mean, worst = sustained([hs_round(n, sw, v, list(range(n))) for v in range(n)])
-        after, _ = sustained([hs_round(n, sw, v, live) for v in range(n)])
-        # A crashed leader costs one timeout each time its turn comes; the next
-        # leader proposes a block carrying the rounds of the stall.
-        stall = vto
-        R = min(KEEP, math.ceil(stall / T))
-        newp = next(i for i in range(1, n + 1) if i % n in live) % n
-        burst = {}
-        unicast(burst, live, newp, n, sw)                       # NEW-VIEW
-        to_all(burst, newp, n, sw, frames=R)                    # the catch-up block
-        unicast(burst, live, (newp + 1) % n, n, sw)             # its votes
-    else:
-        mean, worst = sustained([rf_round(n, sw, 0, list(range(n)))])
-        newp = next(i for i in range(n) if i in live)
-        after, _ = sustained([rf_round(n, sw, newp, live)])
-        stall = 1.5 * vto                                       # mean randomised election timeout
-        R = min(KEEP, math.ceil(stall / T))
-        burst = {}
-        to_all(burst, newp, n, sw)                              # RequestVote
-        unicast(burst, live, newp, n, sw)                       # votes
-        to_all(burst, newp, n, sw, frames=R)                    # entries of the stall
-        unicast(burst, live, newp, n, sw)                       # acknowledgements
-    # HotStuff: the next leader cannot propose before the votes reach it, so each
-    # round must clear the link within the round: the worst round binds, not the
-    # mean (p1: a window above the mean but below the worst round collapsed).
-    M = worst if a.protocol == "hotstuff" else math.ceil(max(mean.values()))
+    mean, worst = sustained([hs_round(n, sw, v, list(range(n))) for v in range(n)])
+    after, _ = sustained([hs_round(n, sw, v, live) for v in range(n)])
+    # A crashed leader costs one timeout each time its turn comes; the next
+    # leader proposes a block carrying the rounds of the stall.
+    stall = vto
+    R = min(KEEP, math.ceil(stall / T))
+    newp = next(i for i in range(1, n + 1) if i % n in live) % n
+    burst = {}
+    unicast(burst, live, newp, n, sw)                       # NEW-VIEW
+    to_all(burst, newp, n, sw, frames=R)                    # the catch-up block
+    unicast(burst, live, (newp + 1) % n, n, sw)             # its votes
+    # The next leader cannot propose before the votes reach it, so each round
+    # must clear the link within the round: the worst round binds, not the mean
+    # (p1: a window above the mean but below the worst round collapsed).
+    M = worst
     bott = max(mean, key=mean.get)
     worst_l = max(burst, key=lambda l: burst[l])
     B, Mp = burst[worst_l], math.ceil(after.get(worst_l, 0))
@@ -184,7 +164,7 @@ def main(argv):
     ap.add_argument("--flood-node", type=int, default=None,
                     help="validator that sends --flood-factor copies of every frame")
     ap.add_argument("--flood-factor", type=int, default=1)
-    ap.add_argument("--protocol", default="pbft", choices=["pbft", "hotstuff", "raft"])
+    ap.add_argument("--protocol", default="pbft", choices=["pbft", "hotstuff"])
     ap.add_argument("--no-fault", action="store_true",
                     help="no view change: the verdict is C5 alone (c5pass or c5fail)")
     ap.add_argument("--csv", action="store_true")
@@ -217,8 +197,7 @@ def main(argv):
             return 0
         print(f"protocol             {a.protocol}")
         print(f"capacity C           {C} frames/round  (frame {tau_us:.3f} us)")
-        how = ("worst single round, which binds; the mean over the leader rotation is "
-               "lower" if a.protocol == "hotstuff" else "fixed leader")
+        how = "worst single round, which binds; the mean over the leader rotation is lower"
         print(f"normal load M        {M} on {bott} ({how}) -> C5 {'pass' if M <= C else 'FAIL'}"
               f" (slack {C - M})")
         print(f"fault                crashed {sorted(dead) or '-'}; next leader {newp}; "
