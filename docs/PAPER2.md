@@ -104,8 +104,8 @@ commit `3d00954`), runs both scenario checks (`adversary_check.sh`, 30 checks;
 `protocol_check.sh`, 17), the full sweep of 211 cells, `assemble_results.py`, and
 compares the result with `tools/reference/paper2/`:
 
-    tools/verify_paper2.sh -j 4              # all 211 cells, about 5 h on one core
-    tools/verify_paper2.sh --quick           # f1, p1 and v1 only (70 cells, cells only)
+    tools/verify_paper2.sh -j 4              # all 211 cells, about 3 h on one core
+    tools/verify_paper2.sh --quick           # f1, p1 and v1 only (70 cells, about 1 h; cells only)
     tools/verify_paper2.sh --check-only      # assemble and compare an earlier run again
 
 Before building it checks that `tools/validation/v1_cells.csv` still has its
@@ -118,6 +118,8 @@ deterministic, so a matching build reproduces all three exactly. The work folder
 (default `paper2-work` beside the repository) keeps the sweep, the tables and the
 figures; `paper2-repro-results.tar.gz` there packs the logs, summary, tables,
 comparison and environment record for sharing. Exit status 0 means reproduced.
+The sweep's cells add up to 2.6 h of single-core time on an AMD Ryzen 7 3700X and
+3.5 h on an Intel Xeon E3-1230 v3; `-j N` divides that by about N.
 
 **Figures are optional.** The comparison covers every number the figures are
 drawn from, so they are not needed to verify the results; without matplotlib the

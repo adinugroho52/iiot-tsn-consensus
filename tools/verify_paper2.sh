@@ -18,7 +18,7 @@
 #   4. runs the scenario checks: tools/adversary_check.sh (30 PBFT checks) and
 #      tools/protocol_check.sh (17 HotStuff checks);
 #   5. runs the sweep, tools/fault_sweep.sh, over the chosen sets (211 cells for
-#      the full paper, about 5 h on one core; -j N runs N cells at a time);
+#      the full paper, about 3 h on one core; -j N runs N cells at a time);
 #   6. assembles every table and figure with tools/assemble_results.py;
 #   7. compares with the reference (tools/compare_paper2.py): control isolation
 #      and safety in every cell, each cell's outcome and recovery-rule
@@ -42,7 +42,7 @@
 #   -j N              cells run in parallel by the sweep (default 1)
 #   --sets "S ..."    run only these sets (default: f1 f2 f3 f4 f5 p1 p2 v1);
 #                     a partial run checks cells only, not the tables
-#   --quick           the same as --sets "f1 p1 v1": 70 cells, about 2 h serially
+#   --quick           the same as --sets "f1 p1 v1": 70 cells, about 1 h serially
 #   --skip-checks     skip step 4 (the scenario checks, about 15 min)
 #   --check-only      skip steps 2-5: assemble, compare and pack what is
 #                     already in --work

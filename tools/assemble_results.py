@@ -423,7 +423,9 @@ def main(argv):
     ap.add_argument("--out", default="results_paper")
     a = ap.parse_args(argv)
     os.makedirs(a.out, exist_ok=True)
-    cells = enrich(classify(a.summary))
+    # Sorted by name: summary.csv lists cells in the order they finished, which
+    # varies with -j, and all_cells.csv and the figures should not.
+    cells = sorted(enrich(classify(a.summary)), key=lambda c: c["cell"])
     keys = ["cell", "set", "protocol", "config", "attack", "timeout_rounds", "window", "n", "T_ms",
             "C", "M", "spare", "spare_share", "outcome", "failed", "vc_node", "quorum_done",
             "rounds_opened", "abandoned", "cons_peak", "cons_drops", "commit_p50_us",

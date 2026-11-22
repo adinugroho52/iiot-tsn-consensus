@@ -142,3 +142,8 @@ are unchanged, and every remaining cell runs the same command as before.
   shows how to set up an environment with it.
 - `docs/PAPER2.md`: the registered-validation section says how the 25-row file derives from the one registered before
   the v1 runs (commit `3002952`, 40 cells).
+- `assemble_results.py` sorts the cells by name, so `all_cells.csv` and the figures no longer depend on the order in
+  which cells finished (which varies with `-j`). No table changes; `tools/reference/paper2/all_cells.csv` is re-sorted
+  to match, with the same rows.
+- Run times in `verify_paper2.sh`, `docs/PAPER2.md` and the README: the sweep is about 3 h of single-core time (2.6 h
+  on an AMD Ryzen 7 3700X, 3.5 h on an Intel Xeon E3-1230 v3), `--quick` about 1 h.
