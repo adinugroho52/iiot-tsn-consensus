@@ -33,7 +33,8 @@
 #                     commit the reference was produced with)
 #   --tas-src DIR     use an existing TAS clone instead of cloning one
 #   --profile P       ns-3 build profile (default: ns-3's own default)
-#   --quick           run only e1, e6, e9 and the figure captures (~40 min)
+#   --quick           run only e1, e4_150deadline, e6 and the figure captures
+#                     (~40 min)
 #   --check-only      skip steps 2-5: check and pack what is already in --work
 #
 # Rerunning the script resumes: finished experiment sets are skipped and an
@@ -108,32 +109,30 @@ mkdir -p "$RES"
 # Each set writes one results folder; tools/reference/<name> holds its reference.
 SETS=(
   "e1||e1"
-  "e2e3e4||e2 e3 e4"
+  "e2||e2"
+  "e3||e3"
+  "e3_c60||--extra --consFrac=0.60 e3"
+  "e3_1G||--link 1Gbps e3"
+  "e3_1G_c60||--link 1Gbps --extra --ctrlBurst=100 e3"
+  "e4||e4"
+  "e4_100M|E4A_BURSTS=1 10 20 25 26 27 30;E4B_BURSTS=1 5 10 15 20 26|--link 100Mbps e4"
+  "e4_150deadline|E4A_BURSTS=1 100 190 194 195 200|--extra --ctrlDeadline=150us e4a"
   "e5||e5"
-  "e5_c60||--extra --consFrac=0.60 e5"
-  "e5_1G||--link 1Gbps e5"
-  "e5_1G_c60||--link 1Gbps --extra --ctrlBurst=100 e5"
+  "e5_100M|E5_BURSTS=1 10 20|--link 100Mbps --extra --consFrac=0.60 e5"
   "e6||e6"
-  "e6_100M|E6_BURSTS=1 10 20 25 26 27 30|--link 100Mbps e6"
-  "e6_150deadline|E6_BURSTS=1 100 190 194 195 200|--extra --ctrlDeadline=150us e6"
   "e7||e7"
-  "e7_100M|E7_BURSTS=1 5 10 15 20 26|--link 100Mbps e7"
   "e8||e8"
-  "e8_100M|E8_BURSTS=1 10 20|--link 100Mbps --extra --consFrac=0.60 e8"
+  "e8_100M|E8_VALIDATORS=10;E8_SWITCHES=8;E8_SLICES=1 2 3 4 5 6 7|--link 100Mbps --extra --consFrac=0.60 e8"
   "e9||e9"
   "e10||e10"
   "e11||e11"
-  "e11_100M|E11_VALIDATORS=10;E11_SWITCHES=8;E11_SLICES=1 2 3 4 5 6 7|--link 100Mbps --extra --consFrac=0.60 e11"
   "e12||e12"
-  "e13||e13"
-  "e14||e14"
-  "e15||e15"
   "figs||figs"
   "figs_c005_8sw||--ctrl-frac 0.005 --extra --nSwitches=8 figs"
-  "figs_e14||figs_e14"
+  "figs_e11||figs_e11"
 )
 if [[ $QUICK -eq 1 ]]; then
-  q=(); for s in "${SETS[@]}"; do case "${s%%|*}" in e1|e6|e9|figs|figs_c005_8sw|figs_e14) q+=("$s");; esac; done; SETS=("${q[@]}")
+  q=(); for s in "${SETS[@]}"; do case "${s%%|*}" in e1|e4_150deadline|e6|figs|figs_c005_8sw|figs_e11) q+=("$s");; esac; done; SETS=("${q[@]}")
 fi
 
 # ref_cells NAME : the run names of a set in the reference, sorted, one per line

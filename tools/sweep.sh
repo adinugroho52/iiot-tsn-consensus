@@ -7,26 +7,28 @@
 # Options: --link RATE  --shaper tas|prio|fifo  --ctrl-frac F  --extra "--flag=value"
 #          --seeds "1 2 3"  --jobs N (untested against ./ns3 run)  --force  --list  --dry-run
 #
-# Experiments (cells at the defaults; knobs are E<n>_* environment variables, see each block):
+# Experiments (cells at the defaults; knobs are E<n>_* environment variables, see each block).
+# e2 and e4 have parts: name one (e2a, e2b, e2c, e4a, e4b) to run it alone.
 #   e1   alignment vs path length at a 5 us window, naive against aligned          12
-#   e2   consensus load: committee size x message size (1 Gbps)                    20
-#   e3   consensus round interval at 16 validators, 1 kB                            5
-#   e4   control/consensus window split                                             5
-#   e5   shaper comparison: tas, prio, fifo over path length (100 Mbps default)    12
-#   e6   control burst sweep: the capacity cliff                                    9
-#   e7   feasibility frontier: control burst x shaper x path length               84
-#   e8   joint map: control burst x committee x message size x shaper              81
-#   e9   alignment fragility: systematic per-hop offset error, window width         21
-#   e10  device transmit queue size: priority blocking, TAS isolation               24
-#   e11  consensus window slices                                                    14
-#   e12  uncertainty: 20 random draws (clock error, round phase, placement)        180
-#   e13  burst capacity by traffic class and device queue size                       8
-#   e14  capacity mechanism: dequeue pacing (100 Mbps) and the late count (path)     7
-#   e15  consensus-window limit: configurations at the edge of the counting rule     6
+#   e2   consensus load under TAS at 1 Gbps                                         30
+#          (a) committee size x message size 20, (b) round interval 5,
+#          (c) control/consensus window split 5
+#   e3   shaper comparison: tas, prio, fifo over path length (100 Mbps default)    12
+#   e4   control burst                                                             93
+#          (a) burst sweep: the capacity cliff 9,
+#          (b) feasibility frontier: burst x shaper x path length 84
+#   e5   joint map: control burst x committee x message size x shaper              81
+#   e6   alignment fragility: systematic per-hop offset error, window width         21
+#   e7   device transmit queue size: priority blocking, TAS isolation               24
+#   e8   consensus window slices                                                    14
+#   e9   uncertainty: 20 random draws (clock error, round phase, placement)        180
+#   e10  burst capacity by traffic class and device queue size                       8
+#   e11  capacity mechanism: dequeue pacing (100 Mbps) and the late count (path)     7
+#   e12  consensus-window limit: configurations at the edge of the counting rule     6
 #   figs packet captures for the figures (4 runs)
-#   figs_e14  packet capture of one e14 configuration (1 run)
-# `all` runs everything except e12 and the capture sets (figs*). Summarise with frontier.py (e5-e8) and
-# uncertainty.py (e12).
+#   figs_e11  packet capture of one e11 configuration (1 run)
+# `all` runs everything except e9 and the capture sets (figs*). Summarise with frontier.py (e3-e5) and
+# uncertainty.py (e9).
 #
 # Resumption is by row in summary.csv, written only after a run exits zero: an
 # interrupted sweep continues where it stopped. --force re-runs regardless.
@@ -115,7 +117,8 @@ wants() {
   local e="$1"
   for w in "${WANT[@]}"; do
     [[ "$w" == "$e" ]] && return 0
-    [[ "$w" == "all" && "$e" != figs* && "$e" != "e12" ]] && return 0
+    [[ "$e" =~ ^(e[0-9]+)[a-z]$ && "$w" == "${BASH_REMATCH[1]}" ]] && return 0
+    [[ "$w" == "all" && "$e" != figs* && "$e" != "e9" ]] && return 0
   done
   return 1
 }
@@ -242,15 +245,18 @@ if wants e1; then
 fi
 
 # =============================================================================
-# e2 -- consensus load: committee size x message size
+# e2 -- consensus load under TAS at 1 Gbps, three parts
+#   (a) committee size x message size
+#   (b) round interval at the heavy cell, 16 validators and 1 kB
+#   (c) control/consensus window split at the same cell
 # =============================================================================
-if wants e2; then
-  echo "== e2: nValidators x consensusMsgSize"
+if wants e2a; then
+  echo "== e2 (a): nValidators x consensusMsgSize"
   for V in 4 7 10 13 16; do
     for M in 256 512 1024 2048; do
       for R in $SEEDS; do
-        c="e2-v$V-m$M-r$R"
-        launch "$c" e2 "v$V-m$M" "$R" "$CSV/$c.csv" \
+        c="e2-a-v$V-m$M-r$R"
+        launch "$c" e2 "a-v$V-m$M" "$R" "$CSV/$c.csv" \
           --nValidators=$V --consensusMsgSize=$M \
           --latencyCsv="$CSV/$c.csv" --consensusCsv="$CSV/$c-cons.csv"
       done
@@ -259,15 +265,12 @@ if wants e2; then
   wait
 fi
 
-# =============================================================================
-# e3 -- round rate at the heavy cell
-# =============================================================================
-if wants e3; then
-  echo "== e3: consensusInterval at v16/1024"
+if wants e2b; then
+  echo "== e2 (b): consensusInterval at v16/1024"
   for I in 20ms 10ms 5ms 2ms 1ms; do
     for R in $SEEDS; do
-      c="e3-i$I-r$R"
-      launch "$c" e3 "i$I" "$R" "$CSV/$c.csv" \
+      c="e2-b-i$I-r$R"
+      launch "$c" e2 "b-i$I" "$R" "$CSV/$c.csv" \
         --nValidators=16 --consensusMsgSize=1024 --consensusInterval=$I \
         --latencyCsv="$CSV/$c.csv" --consensusCsv="$CSV/$c-cons.csv"
     done
@@ -275,16 +278,13 @@ if wants e3; then
   wait
 fi
 
-# =============================================================================
-# e4 -- bandwidth partition sensitivity
-# =============================================================================
-if wants e4; then
-  echo "== e4: ctrlFrac / consFrac"
+if wants e2c; then
+  echo "== e2 (c): ctrlFrac / consFrac"
   for F in "0.10:0.30" "0.20:0.30" "0.30:0.30" "0.20:0.20" "0.20:0.50"; do
     CF="${F%%:*}"; KF="${F##*:}"
     for R in $SEEDS; do
-      c="e4-c$CF-k$KF-r$R"
-      launch "$c" e4 "c$CF-k$KF" "$R" "$CSV/$c.csv" \
+      c="e2-c-c$CF-k$KF-r$R"
+      launch "$c" e2 "c-c$CF-k$KF" "$R" "$CSV/$c.csv" \
         --nValidators=16 --consensusMsgSize=1024 \
         --ctrlFrac=$CF --consFrac=$KF --latencyCsv="$CSV/$c.csv"
     done
@@ -293,7 +293,7 @@ if wants e4; then
 fi
 
 # =============================================================================
-# e5 -- shaper comparison: does time gating beat plain strict priority?
+# e3 -- shaper comparison: does time gating beat plain strict priority?
 #
 # Run at 100 Mbps deliberately. At 1 Gbps a 1054 B consensus frame is 8.4 us,
 # so strict priority blocks control by at most 8.4 us per hop and never misses
@@ -306,15 +306,15 @@ fi
 # never be transmitted at all and consensus deadlocks. The baselines have no
 # windows and would run fine, which would make the comparison meaningless.
 # =============================================================================
-if wants e5; then
-  echo "== e5: tas vs prio vs fifo (100 Mbps unless --link overrides)"
+if wants e3; then
+  echo "== e3: tas vs prio vs fifo (100 Mbps unless --link overrides)"
   lr=()
   [[ -z "$LINK_RATE" ]] && lr=(--linkRate=100Mbps)
   for SH in tas prio fifo; do
     for S in 4 8 12 16; do
       for R in $SEEDS; do
-        c="e5-$SH-s$S-r$R"
-        launch "$c" e5 "$SH-s$S" "$R" "$CSV/$c.csv" \
+        c="e3-$SH-s$S-r$R"
+        launch "$c" e3 "$SH-s$S" "$R" "$CSV/$c.csv" \
           --shaper=$SH --nSwitches=$S --nValidators=16 --consensusMsgSize=1024 \
           "${lr[@]}" --latencyCsv="$CSV/$c.csv" --consensusCsv="$CSV/$c-cons.csv"
       done
@@ -324,42 +324,39 @@ if wants e5; then
 fi
 
 # =============================================================================
-# e6 -- contested control: how many control frames per cycle can a window carry?
+# e4 -- control burst: how many control frames per cycle, and at what latency?
 #
 # Needs the --ctrlBurst patch. Each period the PLC sends B frames back to back,
 # modelling B streams that share one period and phase. A window of W holds
 # floor(W / frame time) frames, so the first miss is expected at one frame past
 # that. The model is deterministic, so one run per burst size is enough.
-#   1 Gbps  : ./sweep.sh e6                          (window holds 265)
-#   100 Mbps: E6_BURSTS="1 10 20 25 26 27 30" ./sweep.sh --link 100Mbps e6
+#   (a) burst sweep at the defaults (4 switches, TAS): the capacity cliff
+#   (b) feasibility frontier: burst x shaper x path length. Every cell writes its
+#       per-frame latency CSV, so frontier.py can apply any deadline offline and
+#       no rerun is needed per deadline. Keep the largest burst below the window
+#       capacity (265 at 1 Gbps, 26 at 100 Mbps for 64 B payloads): a run exactly
+#       at capacity keeps a stuck backlog.
+#   1 Gbps  : ./sweep.sh e4                          (window holds 265)
+#   100 Mbps: E4A_BURSTS="1 10 20 25 26 27 30" E4B_BURSTS="1 5 10 15 20 26" \
+#             ./sweep.sh --link 100Mbps e4
 # =============================================================================
-if wants e6; then
-  echo "== e6: control burst sweep"
-  for B in ${E6_BURSTS:-1 50 100 200 260 265 266 270 300}; do
-    c="e6-b$B-r1"
-    launch "$c" e6 "b$B" 1 "$CSV/$c.csv" \
+if wants e4a; then
+  echo "== e4 (a): control burst sweep"
+  for B in ${E4A_BURSTS:-1 50 100 200 260 265 266 270 300}; do
+    c="e4-a-b$B-r1"
+    launch "$c" e4 "a-b$B" 1 "$CSV/$c.csv" \
       --ctrlBurst=$B --latencyCsv="$CSV/$c.csv"
   done
   wait
 fi
 
-# =============================================================================
-# e7 -- feasibility frontier: control load x shaper x path length
-#
-# Needs the --ctrlBurst patch. Every cell writes its per-frame latency CSV, so
-# frontier.py can apply any deadline offline and no rerun is needed per deadline.
-#   1 Gbps  : ./sweep.sh e7
-#   100 Mbps: E7_BURSTS="1 5 10 15 20 26" ./sweep.sh --link 100Mbps e7
-# Keep the largest burst below the window capacity (265 at 1 Gbps, 26 at
-# 100 Mbps for 64 B payloads): a run exactly at capacity keeps a stuck backlog.
-# =============================================================================
-if wants e7; then
-  echo "== e7: control burst x shaper x switches"
+if wants e4b; then
+  echo "== e4 (b): control burst x shaper x switches"
   for SH in tas prio fifo; do
-    for S in ${E7_SWITCHES:-4 8 12 16}; do
-      for B in ${E7_BURSTS:-1 50 100 150 200 250 265}; do
-        c="e7-$SH-s$S-b$B-r1"
-        launch "$c" e7 "$SH-s$S-b$B" 1 "$CSV/$c.csv" \
+    for S in ${E4B_SWITCHES:-4 8 12 16}; do
+      for B in ${E4B_BURSTS:-1 50 100 150 200 250 265}; do
+        c="e4-b-$SH-s$S-b$B-r1"
+        launch "$c" e4 "b-$SH-s$S-b$B" 1 "$CSV/$c.csv" \
           --shaper=$SH --nSwitches=$S --nValidators=16 --consensusMsgSize=1024 \
           --ctrlBurst=$B --latencyCsv="$CSV/$c.csv"
       done
@@ -369,24 +366,24 @@ if wants e7; then
 fi
 
 # =============================================================================
-# e8 -- joint map: control load x consensus load x shaper, one path length
+# e5 -- joint map: control load x consensus load x shaper, one path length
 #
-# Needs the --ctrlBurst patch. e7 holds consensus fixed; this adds the consensus
+# Needs the --ctrlBurst patch. e4 (b) holds consensus fixed; this adds the consensus
 # axes (committee size, message size) so frontier.py can report where control
 # AND consensus both hold. Under TAS the two should be independent; under
 # priority and FIFO they interact, which is what this map is for.
-#   1 Gbps  : ./sweep.sh e8
-#   100 Mbps: E8_BURSTS="1 10 20" ./sweep.sh --link 100Mbps e8
+#   1 Gbps  : ./sweep.sh e5
+#   100 Mbps: E5_BURSTS="1 10 20" ./sweep.sh --link 100Mbps e5
 # =============================================================================
-if wants e8; then
-  echo "== e8: shaper x validators x message size x control burst"
-  S=${E8_SWITCHES:-8}
+if wants e5; then
+  echo "== e5: shaper x validators x message size x control burst"
+  S=${E5_SWITCHES:-8}
   for SH in tas prio fifo; do
-    for N in ${E8_VALIDATORS:-4 10 16}; do
-      for M in ${E8_MSGSIZES:-256 1024 2048}; do
-        for B in ${E8_BURSTS:-1 100 200}; do
-          c="e8-$SH-s$S-n$N-m$M-b$B-r1"
-          launch "$c" e8 "$SH-s$S-n$N-m$M-b$B" 1 "$CSV/$c.csv" \
+    for N in ${E5_VALIDATORS:-4 10 16}; do
+      for M in ${E5_MSGSIZES:-256 1024 2048}; do
+        for B in ${E5_BURSTS:-1 100 200}; do
+          c="e5-$SH-s$S-n$N-m$M-b$B-r1"
+          launch "$c" e5 "$SH-s$S-n$N-m$M-b$B" 1 "$CSV/$c.csv" \
             --shaper=$SH --nSwitches=$S --nValidators=$N --consensusMsgSize=$M \
             --ctrlBurst=$B --latencyCsv="$CSV/$c.csv"
         done
@@ -397,7 +394,7 @@ if wants e8; then
 fi
 
 # =============================================================================
-# e9 -- how fragile is gate alignment?
+# e6 -- how fragile is gate alignment?
 #
 # Uses only existing flags. Phase of port k is k x --perHopOffset, so an offset
 # that is eps ns too small drifts by k x eps ns by hop k: windows open early and
@@ -406,25 +403,25 @@ fi
 # length and grows with window width. A negative eps (offset too large) only
 # makes the frame wait, so it costs latency, not misses.
 #   (a) sweep eps at a 5 us window     (b) sweep window width at a fixed eps
-# E9_BASE is the derived offset in ns: 852 at 1 Gbps with 64 B payloads.
+# E6_BASE is the derived offset in ns: 852 at 1 Gbps with 64 B payloads.
 # =============================================================================
-if wants e9; then
-  echo "== e9: alignment fragility"
-  S=${E9_SWITCHES:-16}
-  BASE=${E9_BASE:-852}
-  for E in ${E9_EPS:-0 100 200 250 260 270 280 300 310 320 400 852 -500 -5000}; do
-    c="e9-s$S-w5-e$E-r1"
-    launch "$c" e9 "s$S-w5-e$E" 1 "$CSV/$c.csv" \
+if wants e6; then
+  echo "== e6: alignment fragility"
+  S=${E6_SWITCHES:-16}
+  BASE=${E6_BASE:-852}
+  for E in ${E6_EPS:-0 100 200 250 260 270 280 300 310 320 400 852 -500 -5000}; do
+    c="e6-s$S-w5-e$E-r1"
+    launch "$c" e6 "s$S-w5-e$E" 1 "$CSV/$c.csv" \
       --nSwitches=$S --ctrlFrac=0.005 --perHopOffset=$((BASE - E))ns \
       --latencyCsv="$CSV/$c.csv"
   done
-  FIX=${E9_FIXEPS:-200}
-  for W in ${E9_WINDOWS:-2 3 3.5 4 5 10 20 50}; do
+  FIX=${E6_FIXEPS:-200}
+  for W in ${E6_WINDOWS:-2 3 3.5 4 5 10 20 50}; do
     # W = 5 at the same error is already a cell of sweep (a)
-    [[ "$W" == "5" && " ${E9_EPS:-0 100 200 250 260 270 280 300 310 320 400 852 -500 -5000} " == *" $FIX "* ]] && continue
+    [[ "$W" == "5" && " ${E6_EPS:-0 100 200 250 260 270 280 300 310 320 400 852 -500 -5000} " == *" $FIX "* ]] && continue
     F=$(awk -v w="$W" 'BEGIN{printf "%.5f", w/1000}')
-    c="e9-s$S-w$W-e$FIX-r1"
-    launch "$c" e9 "s$S-w$W-e$FIX" 1 "$CSV/$c.csv" \
+    c="e6-s$S-w$W-e$FIX-r1"
+    launch "$c" e6 "s$S-w$W-e$FIX" 1 "$CSV/$c.csv" \
       --nSwitches=$S --ctrlFrac=$F --perHopOffset=$((BASE - FIX))ns \
       --latencyCsv="$CSV/$c.csv"
   done
@@ -432,7 +429,7 @@ if wants e9; then
 fi
 
 # =============================================================================
-# e10 -- does the device transmit queue explain strict priority's extra blocking?
+# e7 -- does the device transmit queue explain strict priority's extra blocking?
 #
 # Needs the --devQueue patch. A frame already handed to the device queue cannot be
 # overtaken, so with a queue of q packets a control frame can wait behind the
@@ -440,13 +437,13 @@ fi
 # Hypothesis: priority's worst-case control latency rises with q. TAS should not,
 # if its gates really isolate control. 1 Gbps, 16 validators, 1 kB messages.
 # =============================================================================
-if wants e10; then
-  echo "== e10: device queue size"
+if wants e7; then
+  echo "== e7: device queue size"
   for SH in prio tas fifo; do
-    for S in ${E10_SWITCHES:-4 16}; do
-      for Q in ${E10_QUEUES:-1 2 4 8}; do
-        c="e10-$SH-s$S-q$Q-r1"
-        launch "$c" e10 "$SH-s$S-q$Q" 1 "$CSV/$c.csv" \
+    for S in ${E7_SWITCHES:-4 16}; do
+      for Q in ${E7_QUEUES:-1 2 4 8}; do
+        c="e7-$SH-s$S-q$Q-r1"
+        launch "$c" e7 "$SH-s$S-q$Q" 1 "$CSV/$c.csv" \
           --shaper=$SH --nSwitches=$S --nValidators=16 --consensusMsgSize=1024 \
           --devQueue=${Q}p --latencyCsv="$CSV/$c.csv"
       done
@@ -456,25 +453,25 @@ if wants e10; then
 fi
 
 # =============================================================================
-# e11 -- consensus slices: trade gate-wait latency against per-slice stranding
+# e8 -- consensus slices: trade gate-wait latency against per-slice stranding
 #
 # Needs the --consSlices patch. Cutting the consensus window into K slices spread
 # over the cycle shortens the wait for the next window, so each PBFT phase
 # finishes sooner. Total consensus time is unchanged, but every slice strands up
 # to one frame, so capacity becomes K * floor((window / K) / frame time) frames
 # per cycle, which is not monotone in K.
-#   1 Gbps  : ./sweep.sh e11
-#   100 Mbps: E11_VALIDATORS=10 E11_SWITCHES=8 E11_SLICES="1 2 3 4 5 6 7" \
-#             ./sweep.sh --link 100Mbps --extra --consFrac=0.60 e11
+#   1 Gbps  : ./sweep.sh e8
+#   100 Mbps: E8_VALIDATORS=10 E8_SWITCHES=8 E8_SLICES="1 2 3 4 5 6 7" \
+#             ./sweep.sh --link 100Mbps --extra --consFrac=0.60 e8
 # =============================================================================
-if wants e11; then
-  echo "== e11: consensus slices"
-  N=${E11_VALIDATORS:-16}
-  M=${E11_MSG:-1024}
-  for S in ${E11_SWITCHES:-4 16}; do
-    for K in ${E11_SLICES:-1 2 3 4 6 8 12}; do
-      c="e11-s$S-n$N-m$M-k$K-r1"
-      launch "$c" e11 "s$S-n$N-m$M-k$K" 1 "$CSV/$c.csv" \
+if wants e8; then
+  echo "== e8: consensus slices"
+  N=${E8_VALIDATORS:-16}
+  M=${E8_MSG:-1024}
+  for S in ${E8_SWITCHES:-4 16}; do
+    for K in ${E8_SLICES:-1 2 3 4 6 8 12}; do
+      c="e8-s$S-n$N-m$M-k$K-r1"
+      launch "$c" e8 "s$S-n$N-m$M-k$K" 1 "$CSV/$c.csv" \
         --nSwitches=$S --nValidators=$N --consensusMsgSize=$M \
         --consSlices=$K --latencyCsv="$CSV/$c.csv"
     done
@@ -483,7 +480,7 @@ if wants e11; then
 fi
 
 # =============================================================================
-# e12 -- uncertainty: independent runs with the random options switched on
+# e9 -- uncertainty: independent runs with the random options switched on
 #
 # Needs the --offsetJitter patch. The model is deterministic until a random option
 # is on, so --run only means something here. Each run is a different, repeatable
@@ -492,30 +489,30 @@ fi
 #       with a 5 us window each run either misses (every frame) or never does, so
 #       the interesting number is the share of runs that miss, versus sigma.
 #       Independent errors do not accumulate along the path the way a systematic
-#       per-hop drift does (e9): a frame is late by about the largest earlier
+#       per-hop drift does (e6): a frame is late by about the largest earlier
 #       error minus the current one. Expect the transition near sigma = 1 to 2 us
 #       (about 0.1 at 1000 ns, 0.4 at 1250 ns, 0.7 at 1500 ns, 0.95 at 2000 ns),
-#       not near the 270 ns per hop that e9 found.
+#       not near the 270 ns per hop that e6 found.
 #   (b) the shaper comparison with random consensus round phase and validator
 #       placement, so every headline number gets an interval.
-#   ./sweep.sh e12                       E12_SEEDS="1 2 3 4 5" for a quick look
+#   ./sweep.sh e9                        E9_SEEDS="1 2 3 4 5" for a quick look
 # =============================================================================
-if wants e12; then
-  echo "== e12: independent runs"
-  SEEDS12=${E12_SEEDS:-$(seq -s ' ' 1 20)}
-  for SIG in ${E12_SIGMAS:-0 500 1000 1250 1500 2000}; do
-    for R in $SEEDS12; do
-      c="e12-a-sig$SIG-r$R"
-      launch "$c" e12 "a-sig$SIG" "$R" "$CSV/$c.csv" \
+if wants e9; then
+  echo "== e9: independent runs"
+  SEEDS9=${E9_SEEDS:-$(seq -s ' ' 1 20)}
+  for SIG in ${E9_SIGMAS:-0 500 1000 1250 1500 2000}; do
+    for R in $SEEDS9; do
+      c="e9-a-sig$SIG-r$R"
+      launch "$c" e9 "a-sig$SIG" "$R" "$CSV/$c.csv" \
         --nSwitches=16 --ctrlFrac=0.005 --offsetJitter=${SIG}ns --latencyCsv="$CSV/$c.csv"
     done
   done
   for SH in tas prio fifo; do
-    for R in $SEEDS12; do
-      c="e12-b-$SH-r$R"
-      launch "$c" e12 "b-$SH" "$R" "$CSV/$c.csv" \
-        --shaper=$SH --nSwitches=${E12_SWITCHES:-8} --nValidators=16 --consensusMsgSize=1024 \
-        --ctrlBurst=${E12_BURST:-100} --randomRoundPhase=true --randomPlacement=true \
+    for R in $SEEDS9; do
+      c="e9-b-$SH-r$R"
+      launch "$c" e9 "b-$SH" "$R" "$CSV/$c.csv" \
+        --shaper=$SH --nSwitches=${E9_SWITCHES:-8} --nValidators=16 --consensusMsgSize=1024 \
+        --ctrlBurst=${E9_BURST:-100} --randomRoundPhase=true --randomPlacement=true \
         --latencyCsv="$CSV/$c.csv"
     done
   done
@@ -523,7 +520,7 @@ if wants e12; then
 fi
 
 # =============================================================================
-# e13 -- why does the control class admit one frame more than strict fit?
+# e10 -- why does the control class admit one frame more than strict fit?
 #
 # Needs the --ctrlTos and --devQueue patches. The TAS qdisc tests the fit and
 # paces its dequeues with d, the frame time at its network-layer size (no PPP
@@ -531,18 +528,18 @@ fi
 # device queue leaves even after its gate closes, so a backlogged port releases
 #   min( floor((W - d) / tau) + 1 + q ,  floor((W - d) / d) + 1 )
 # frames per cycle. At 1 Gbps, 64 B payloads, W = 200 us that is 266, 267, 269,
-# 271 for q = 1, 2, 4, 8 (the pacing term binds at q = 8). e14 tests it further. The same burst is sent in
+# 271 for q = 1, 2, 4, 8 (the pacing term binds at q = 8). e11 tests it further. The same burst is sent in
 # the control class (ToS 16) and in the consensus class (ToS 24) with equal windows,
 # so any class dependence shows up directly. Delivered frames per cycle =
 # ctrl_recv / 5400 for a 6 s run.
 # =============================================================================
-if wants e13; then
-  echo "== e13: control class vs consensus class, by device queue size"
-  for TOS in ${E13_TOS:-16 24}; do
-    for Q in ${E13_QUEUES:-1 2 4 8}; do
-      c="e13-tos$TOS-q$Q-r1"
-      launch "$c" e13 "tos$TOS-q$Q" 1 "$CSV/$c.csv" \
-        --ctrlTos=$TOS --devQueue=${Q}p --ctrlBurst=${E13_BURST:-300} \
+if wants e10; then
+  echo "== e10: control class vs consensus class, by device queue size"
+  for TOS in ${E10_TOS:-16 24}; do
+    for Q in ${E10_QUEUES:-1 2 4 8}; do
+      c="e10-tos$TOS-q$Q-r1"
+      launch "$c" e10 "tos$TOS-q$Q" 1 "$CSV/$c.csv" \
+        --ctrlTos=$TOS --devQueue=${Q}p --ctrlBurst=${E10_BURST:-300} \
         --ctrlFrac=0.2 --consFrac=0.2 --nSwitches=4 --nValidators=4 --consensusMsgSize=256 \
         --latencyCsv="$CSV/$c.csv"
     done
@@ -551,7 +548,7 @@ if wants e13; then
 fi
 
 # =============================================================================
-# e14 -- capacity mechanism: the two properties of the TAS qdisc behind e13
+# e11 -- capacity mechanism: the two properties of the TAS qdisc behind e10
 #
 # Part 1, 100 Mbps, B = 40, W_c = W_k = 200 us, q = 1, 2, 4, 8. The pacing term of
 #   min( floor((W - d) / tau) + 1 + q ,  floor((W - d) / d) + 1 )
@@ -565,25 +562,25 @@ fi
 # The configurations are fixed here; --link and --extra still reach every run
 # through COMMON, but the per-cell flags come last and take precedence.
 # =============================================================================
-if wants e14; then
-  echo "== e14: capacity mechanism (dequeue pacing at 100 Mbps; late count by path length)"
-  for Q in ${E14_QUEUES:-1 2 4 8}; do
-    c="e14-100M-q$Q-r1"
-    launch "$c" e14 "100M-q$Q" 1 "$CSV/$c.csv" \
+if wants e11; then
+  echo "== e11: capacity mechanism (dequeue pacing at 100 Mbps; late count by path length)"
+  for Q in ${E11_QUEUES:-1 2 4 8}; do
+    c="e11-100M-q$Q-r1"
+    launch "$c" e11 "100M-q$Q" 1 "$CSV/$c.csv" \
       --linkRate=100Mbps --ctrlTos=16 --devQueue=${Q}p --ctrlBurst=40 \
       --ctrlFrac=0.2 --consFrac=0.2 --nSwitches=4 --nValidators=4 --consensusMsgSize=256 \
       --latencyCsv="$CSV/$c.csv"
   done
-  for S in ${E14_SWITCHES:-8 12 16}; do
-    c="e14-b266-s$S-r1"
-    launch "$c" e14 "b266-s$S" 1 "$CSV/$c.csv" \
+  for S in ${E11_SWITCHES:-8 12 16}; do
+    c="e11-b266-s$S-r1"
+    launch "$c" e11 "b266-s$S" 1 "$CSV/$c.csv" \
       --linkRate=1Gbps --nSwitches=$S --ctrlBurst=266 --latencyCsv="$CSV/$c.csv"
   done
   wait
 fi
 
 # =============================================================================
-# e15 -- consensus-window limit: the counting rule at its edge
+# e12 -- consensus-window limit: the counting rule at its edge
 #
 # The rule: a TAS configuration commits every round if and only if the busiest
 # link's consensus frames per round, M_max, do not exceed the whole frames its
@@ -600,22 +597,22 @@ fi
 # The configurations are fixed here; per-cell flags come last and take precedence
 # over --link and --extra.
 # =============================================================================
-if wants e15; then
-  echo "== e15: consensus-window limit"
-  E15_1G="--linkRate=1Gbps --nSwitches=4 --nValidators=16 --consensusMsgSize=1024"
-  E15_100M="--linkRate=100Mbps --consFrac=0.60 --nSwitches=8 --nValidators=10 --consensusMsgSize=1024 --consSlices=1"
+if wants e12; then
+  echo "== e12: consensus-window limit"
+  E12_1G="--linkRate=1Gbps --nSwitches=4 --nValidators=16 --consensusMsgSize=1024"
+  E12_100M="--linkRate=100Mbps --consFrac=0.60 --nSwitches=8 --nValidators=10 --consensusMsgSize=1024 --consSlices=1"
   # tag | flags
   for entry in \
-    "1g-w300-t4ms|$E15_1G --consensusInterval=4ms" \
-    "1g-w300-t3ms|$E15_1G --consensusInterval=3ms" \
-    "1g-w275-t4ms|$E15_1G --consFrac=0.275 --consensusInterval=4ms" \
-    "1g-w260-t4ms|$E15_1G --consFrac=0.26 --consensusInterval=4ms" \
-    "100m-k1-t8ms|$E15_100M --consensusInterval=8ms" \
-    "100m-k1-t7ms|$E15_100M --consensusInterval=7ms --stopAt=12.0s"; do
+    "1g-w300-t4ms|$E12_1G --consensusInterval=4ms" \
+    "1g-w300-t3ms|$E12_1G --consensusInterval=3ms" \
+    "1g-w275-t4ms|$E12_1G --consFrac=0.275 --consensusInterval=4ms" \
+    "1g-w260-t4ms|$E12_1G --consFrac=0.26 --consensusInterval=4ms" \
+    "100m-k1-t8ms|$E12_100M --consensusInterval=8ms" \
+    "100m-k1-t7ms|$E12_100M --consensusInterval=7ms --stopAt=12.0s"; do
     tag="${entry%%|*}"; flags="${entry#*|}"
-    c="e15-$tag-r1"
+    c="e12-$tag-r1"
     # shellcheck disable=SC2086
-    launch "$c" e15 "$tag" 1 "$CSV/$c.csv" $flags \
+    launch "$c" e12 "$tag" 1 "$CSV/$c.csv" $flags \
       --latencyCsv="$CSV/$c.csv" --consensusCsv="$CSV/$c-cons.csv"
   done
   wait
@@ -654,21 +651,21 @@ if wants figs; then
 fi
 
 # =============================================================================
-# figs_e14 -- one e14 configuration captured on every port of the path:
+# figs_e11 -- one e11 configuration captured on every port of the path:
 # 100 Mbps, B = 40, q = 8. Expected per port and cycle: 27 frames, exactly one of
 # them overrunning the gate close and none starting after it (the device-queue
 # term alone would let 8 leave after the close).
 # =============================================================================
-if wants figs_e14; then
-  echo "== figs_e14: capture of one e14 configuration"
-  if [[ $LIST -eq 1 ]]; then echo "  fig   fig-e14"
+if wants figs_e11; then
+  echo "== figs_e11: capture of one e11 configuration"
+  if [[ $LIST -eq 1 ]]; then echo "  fig   fig-e11"
   elif [[ $DRY -eq 1 ]]; then
-    printf '%s run "%s %s"\n' "$NS3" "$PROG" "${COMMON[*]} --run=1 --linkRate=100Mbps --ctrlTos=16 --devQueue=8p --ctrlBurst=40 --ctrlFrac=0.2 --consFrac=0.2 --nSwitches=4 --nValidators=4 --consensusMsgSize=256 --pcapPoints=path --pcapStart=0.5s --pcapStop=0.52s --pcapPrefix=$PCAP/fig-e14"
+    printf '%s run "%s %s"\n' "$NS3" "$PROG" "${COMMON[*]} --run=1 --linkRate=100Mbps --ctrlTos=16 --devQueue=8p --ctrlBurst=40 --ctrlFrac=0.2 --consFrac=0.2 --nSwitches=4 --nValidators=4 --consensusMsgSize=256 --pcapPoints=path --pcapStart=0.5s --pcapStop=0.52s --pcapPrefix=$PCAP/fig-e11"
   elif "$NS3" run --no-build "$PROG ${COMMON[*]} --run=1 --linkRate=100Mbps --ctrlTos=16 --devQueue=8p \
       --ctrlBurst=40 --ctrlFrac=0.2 --consFrac=0.2 --nSwitches=4 --nValidators=4 \
       --consensusMsgSize=256 --pcapPoints=path --pcapStart=0.5s --pcapStop=0.52s \
-      --pcapPrefix=$PCAP/fig-e14" > "$LOG/fig-e14.log" 2>&1; then echo "ok    fig-e14"
-  else echo "fig-e14" >> "$FAILED"; echo "FAIL  fig-e14 -- see $LOG/fig-e14.log" >&2; fi
+      --pcapPrefix=$PCAP/fig-e11" > "$LOG/fig-e11.log" 2>&1; then echo "ok    fig-e11"
+  else echo "fig-e11" >> "$FAILED"; echo "FAIL  fig-e11 -- see $LOG/fig-e11.log" >&2; fi
 fi
 
 # --- wrap up -----------------------------------------------------------------

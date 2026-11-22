@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-uncertainty.py -- intervals for runs that differ only in --run (sweep.sh e12).
+uncertainty.py -- intervals for runs that differ only in --run (sweep.sh e9).
 
 Groups summary.csv rows by (experiment, tag), where the tag carries everything
 except the run number, and reports for each group:
@@ -10,8 +10,8 @@ except the run number, and reports for each group:
     Wilson interval. For narrow-window alignment each run either misses every
     frame or none, so this share is the number that matters there.
 
-  uncertainty.py results_e12
-  uncertainty.py results_e12 --validators 16 --csv uncertainty.csv
+  uncertainty.py results_e9
+  uncertainty.py results_e9 --validators 16 --csv uncertainty.csv
 
 A metric that does not vary across runs is printed once and marked "const": the
 model is deterministic wherever no random option is on, so a zero-width interval

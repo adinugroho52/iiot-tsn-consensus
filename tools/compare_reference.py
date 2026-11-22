@@ -5,7 +5,7 @@ compare_reference.py -- check experiment results against the reference results o
     tools/compare_reference.py check RESULTS REFERENCE [SET ...]
     tools/compare_reference.py make  RESULTS REFERENCE [SET ...]
 
-RESULTS holds one folder per experiment set (e1, e2e3e4, ..., figs), each as written by
+RESULTS holds one folder per experiment set (e1, e2, ..., figs), each as written by
 tools/sweep.sh: summary.csv, log/, csv/ and pcap/. A set may carry csv-sha256.txt in place
 of csv/, as in the archive that tools/verify_reproducibility.sh packs.
 

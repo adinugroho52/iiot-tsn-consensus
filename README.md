@@ -12,7 +12,8 @@ simulated, not a blockchain.
 
 ## Status
 
-Release v1.0.0 (Zenodo, DOI [10.5281/zenodo.24384365](https://doi.org/10.5281/zenodo.24384365)) is the revision the paper's results come from. Built on ns-3.49 with the TAS module
+Release v1.2.0 numbers the experiments as the paper does (e1–e12). Its runs and results are those of v1.0.0 (Zenodo, DOI
+[10.5281/zenodo.24384365](https://doi.org/10.5281/zenodo.24384365)), under the new names. Built on ns-3.49 with the TAS module
 at commit `3d00954`, all 697 runs reproduce the reference results in `tools/reference/` exactly;
 `tools/verify_reproducibility.sh` repeats that check from scratch (see "Reproducing the paper's results" below). Later
 versions are listed in `CHANGELOG.md`.
@@ -80,33 +81,34 @@ LICENSE.md                                                          MIT Licence
 
 ## Experiments
 
-`tools/sweep.sh` is the driver: `tools/sweep.sh --list`, `--dry-run e6`, `tools/sweep.sh e1 e5`. Each run needs a row in
+`tools/sweep.sh` is the driver: `tools/sweep.sh --list`, `--dry-run e4`, `tools/sweep.sh e1 e3`. Each run needs a row in
 `results/summary.csv` to count as done, so an interrupted sweep resumes. The header of the script lists every
-experiment and its cell count. What each one showed:
+experiment and its cell count; e2 and e4 have parts, and naming one part (`e2b`, `e4a`) runs it alone. What each one
+showed:
 
 | | Result |
 |---|---|
 | e1 | at a 5 µs control window aligned gates never miss; naive gates miss every frame from 6 switches |
-| e2, e3, e4 | consensus under TAS at 1 Gbps commits fully up to 5 ms rounds and collapses at 2 ms; latency scales roughly with 1 ÷ window |
-| e5 | TAS control latency is hops × one hop time with no misses; priority grows with path length; FIFO is bounded by its queue depth |
-| e6 | control burst: latency of the last frame is exact, and a window has a hard capacity per cycle |
-| e7, e8 | feasibility frontier and joint control × consensus map; TAS control is independent of consensus load, priority's is not |
-| e9 | alignment tolerance to systematic per-hop drift is (window − frame) ÷ (hops − 1) |
-| e10 | priority's worst case rises with device-queue size; TAS and FIFO do not |
-| e11 | slicing the consensus window buys at most about 20% and can break feasibility |
-| e12 | twenty random draws: TAS control identical in every draw, baselines vary widely with placement |
-| e13 | the extra capacity of a burst port appears in both classes and grows with device-queue size, up to the qdisc's pacing limit |
-| e14 | the capacity mechanism, predicted before the runs: at 100 Mbps the pacing limit gives 27 frames per cycle at every device-queue size; one frame above capacity, each switch holds back one frame per cycle |
-| e15 | the consensus-window counting rule at its edge, outcomes stated before the runs: three configurations just inside the limit (one with demand equal to capacity) commit; three just outside it, one of them short by a single frame per round, do not |
+| e2 | consensus under TAS at 1 Gbps (committee × message size, round interval, window split) commits fully up to 5 ms rounds and collapses at 2 ms; latency scales roughly with 1 ÷ window |
+| e3 | TAS control latency is hops × one hop time with no misses; priority grows with path length; FIFO is bounded by its queue depth |
+| e4 | control burst: latency of the last frame is exact and a window has a hard capacity per cycle (a); feasibility frontier per shaper and path length (b) |
+| e5 | joint control × consensus map; TAS control is independent of consensus load, priority's is not |
+| e6 | alignment tolerance to systematic per-hop drift is (window − frame) ÷ (hops − 1) |
+| e7 | priority's worst case rises with device-queue size; TAS and FIFO do not |
+| e8 | slicing the consensus window buys at most about 20% and can break feasibility |
+| e9 | twenty random draws: TAS control identical in every draw, baselines vary widely with placement |
+| e10 | the extra capacity of a burst port appears in both classes and grows with device-queue size, up to the qdisc's pacing limit |
+| e11 | the capacity mechanism: at 100 Mbps the pacing limit gives 27 frames per cycle at every device-queue size; one frame above capacity, each switch holds back one frame per cycle |
+| e12 | the consensus-window counting rule at its edge: three configurations just inside the limit (one with demand equal to capacity) commit; three just outside it, one of them short by a single frame per round, do not |
 
-Captures: `figs` (the paper's figures) and `figs_e14` (one e14 configuration on every port of the path) are run only by name.
+Captures: `figs` (the paper's figures) and `figs_e11` (one e11 configuration on every port of the path) are run only by name.
 
 Round overlap: `tools/round_check.sh` reruns each of the 68 feasible TAS configurations with receive captures at every
 validator and reports, per configuration, whether the last frame of every round arrives before the next round starts
 (rule 4). It writes `results_rounds/check.txt`; about 45 minutes.
 
-Summaries: `tools/frontier.py results_e7 results_e8` (largest feasible control burst per shaper and deadline, and the
-joint map) and `tools/uncertainty.py results_e12` (means with 95% intervals, and the share of runs with a late frame).
+Summaries: `tools/frontier.py results_e4 results_e5` (largest feasible control burst per shaper and deadline, and the
+joint map) and `tools/uncertainty.py results_e9` (means with 95% intervals, and the share of runs with a late frame).
 
 ## Reproducing the paper's results
 
@@ -114,7 +116,7 @@ joint map) and `tools/uncertainty.py results_e12` (means with 95% intervals, and
 
 ```bash
 tools/verify_reproducibility.sh            # all 697 runs, about 20 h serially
-tools/verify_reproducibility.sh --quick    # e1, e6, e9 and the captures, about 40 min
+tools/verify_reproducibility.sh --quick    # e1, e4_150deadline, e6 and the captures, about 40 min
 ```
 
 It clones ns-3.49 and the TAS module at commit `3d00954` into a work folder beside the repository (`--work` to choose
@@ -134,9 +136,9 @@ Scope matters for each; they are not general laws.
 
 1. **Latency under TAS (aligned, backlog-free):** last frame of a burst of B has latency (B − 1) × frame time + hops × (frame time + link delay).
 2. **Alignment tolerance:** an offset error of ε per hop (systematic drift) fits while (hops − 1) × ε ≤ window − frame time. Independent per-port errors do not accumulate; at 16 switches and a 5 µs window misses become likely above about 1 µs standard deviation.
-3. **Capacity of a backlogged TAS port (this TAS module):** min(⌊(W − d) ÷ τ⌋ + 1 + q, ⌊(W − d) ÷ d⌋ + 1) frames per cycle, with τ the frame time on the wire, d the frame time at its network-layer size (no PPP header), which the qdisc uses both for its fit test and to pace its dequeues, and q the device-queue size. The first term counts frames that leave through the device queue after the gate closes; the second is the pacing limit. Exact in e6, e13, e14 and the overload capture; it is why small control frames gain extra frames per window and large consensus frames do not.
-   **One frame above capacity** (B = ⌊W ÷ τ⌋ + 1 on an aligned path): every frame is delivered, but each switch holds back one frame per cycle, so n frames per cycle are late with n switches (e6, e14).
-4. **Consensus window feasibility:** the whole frames per cycle the window holds (strict fit, K × ⌊(window ÷ K) ÷ frame⌋ with K slices) must cover the busiest link's frames per round divided by cycles per round. Classified all 84 TAS configurations of the paper correctly (68 feasible, 16 not), including the six of e15 placed at its edge, and did not change with device-queue size. It is necessary in every configuration. It is also sufficient wherever rounds do not overlap: if one round, started on empty queues, delivers its last frame before the next round starts, every round repeats it. `tools/round_check.sh` tests that with receive captures: no overlap in 61 of the 68 feasible configurations, so the rule is proved there; rounds overlap in 7 (e11 at 100 Mbps with 2, 3, 5 and 6 slices, and the three feasible e15 configurations), where it is observed. A message above 1472 bytes travels as two IP fragments (1502 and 598 bytes on the wire for 2048 B); the window count then applies the fit test to the fragments, which changes no classification here.
+3. **Capacity of a backlogged TAS port (this TAS module):** min(⌊(W − d) ÷ τ⌋ + 1 + q, ⌊(W − d) ÷ d⌋ + 1) frames per cycle, with τ the frame time on the wire, d the frame time at its network-layer size (no PPP header), which the qdisc uses both for its fit test and to pace its dequeues, and q the device-queue size. The first term counts frames that leave through the device queue after the gate closes; the second is the pacing limit. Exact in e4, e10, e11 and the overload capture; it is why small control frames gain extra frames per window and large consensus frames do not.
+   **One frame above capacity** (B = ⌊W ÷ τ⌋ + 1 on an aligned path): every frame is delivered, but each switch holds back one frame per cycle, so n frames per cycle are late with n switches (e4, e11).
+4. **Consensus window feasibility:** the whole frames per cycle the window holds (strict fit, K × ⌊(window ÷ K) ÷ frame⌋ with K slices) must cover the busiest link's frames per round divided by cycles per round. Classified all 84 TAS configurations of the paper correctly (68 feasible, 16 not), including the six of e12 placed at its edge, and did not change with device-queue size. It is necessary in every configuration. It is also sufficient wherever rounds do not overlap: if one round, started on empty queues, delivers its last frame before the next round starts, every round repeats it. `tools/round_check.sh` tests that with receive captures: no overlap in 61 of the 68 feasible configurations, so the rule is proved there; rounds overlap in 7 (e8 at 100 Mbps with 2, 3, 5 and 6 slices, and the three feasible e12 configurations), where it is observed. A message above 1472 bytes travels as two IP fragments (1502 and 598 bytes on the wire for 2048 B); the window count then applies the fit test to the fragments, which changes no classification here.
 5. **Priority:** worst-case control latency is at most (switches + 1) × hop time + (q + 1) × switches × consensus frame time, and the measured baseline uses the ns-3 minimum of q = 1.
 
 ## Reproduction anchors
@@ -146,22 +148,22 @@ At `--ctrlPeriod=1000us --stopAt=6.0s`, `--run=1`, from the original runs:
 | Run | Value |
 |---|---|
 | e1 (5 µs window) | aligned 16 switches: max 14.484 µs, no misses; naive 6 switches: p99 1000.85 µs; naive 16 switches: 2004.26 µs |
-| e5 (100 Mbps, `--consFrac` 0.30) | tas-s16: control p99 129.54 µs, 838 rounds committed; prio-s8: p99 1039.98 µs, miss ratio 0.0233333; fifo-s4: p99 67186.5 µs |
-| e5 with `--extra --consFrac=0.60` | tas-s16: 3324 rounds committed |
-| e2 / e3 / e4 | v16-m1024: consensus p99 4435.63 µs; 2 ms rounds: 16978 of 2899 rounds × 16; c0.20-k0.50: p99 2528.38 µs |
-| e6 | 1 Gbps B=265: max 202.79 µs; B=266 delivers 266 per cycle; 100 Mbps B=26: max 226.10 µs |
-| e9 | 16 switches, 5 µs window: ε = 260 ns passes, ε = 270 ns misses |
-| e10 | priority at 16 switches: 197.72 µs at q = 1, 483.10 µs at q = 8; TAS 14.484 µs; FIFO 550.56 µs |
-| e12 part (b) | TAS control max 82.12 µs in all 20 draws |
-| e14 | 100 Mbps, B = 40: 145800 received (27 per cycle) at q = 1, 2, 4, 8; B = 266 at 8, 12, 16 switches: 266 per cycle, 43200, 64800, 86400 late |
-| e15 | 1 Gbps, 4 ms rounds: W_k = 300 µs commits 23182 of 23184, 275 µs 23177; 3 ms rounds at 300 µs 28454 of 30928; 260 µs 22917; 100 Mbps: 8 ms 7238 of 7240, 7 ms (12 s run) 16504 of 16850 |
+| e3 (100 Mbps, `--consFrac` 0.30) | tas-s16: control p99 129.54 µs, 838 rounds committed; prio-s8: p99 1039.98 µs, miss ratio 0.0233333; fifo-s4: p99 67186.5 µs |
+| e3 with `--extra --consFrac=0.60` | tas-s16: 3324 rounds committed |
+| e2 parts (a) / (b) / (c) | v16-m1024: consensus p99 4435.63 µs; 2 ms rounds: 16978 of 2899 rounds × 16; c0.20-k0.50: p99 2528.38 µs |
+| e4 part (a) | 1 Gbps B=265: max 202.79 µs; B=266 delivers 266 per cycle; 100 Mbps B=26: max 226.10 µs |
+| e6 | 16 switches, 5 µs window: ε = 260 ns passes, ε = 270 ns misses |
+| e7 | priority at 16 switches: 197.72 µs at q = 1, 483.10 µs at q = 8; TAS 14.484 µs; FIFO 550.56 µs |
+| e9 part (b) | TAS control max 82.12 µs in all 20 draws |
+| e11 | 100 Mbps, B = 40: 145800 received (27 per cycle) at q = 1, 2, 4, 8; B = 266 at 8, 12, 16 switches: 266 per cycle, 43200, 64800, 86400 late |
+| e12 | 1 Gbps, 4 ms rounds: W_k = 300 µs commits 23182 of 23184, 275 µs 23177; 3 ms rounds at 300 µs 28454 of 30928; 260 µs 22917; 100 Mbps: 8 ms 7238 of 7240, 7 ms (12 s run) 16504 of 16850 |
 
 ## Known limits and open points
 
 - One chain topology and one control-flow shape. Consensus is simplified: fixed leader, no view change, no failures, no ledger.
-- The priority and FIFO baselines use a one-packet device queue, the ns-3 minimum, which adds blocking a hardware scheduler would not have (e10).
+- The priority and FIFO baselines use a one-packet device queue, the ns-3 minimum, which adds blocking a hardware scheduler would not have (e7).
 - Capacity above the window's limit (rule 3) is a property of this TAS module, not of IEEE 802.1Qbv; a hardware port may release a different number of frames.
-- Run logs do not record `--devQueue`; the cell names do (e10, e13, e14).
+- Run logs do not record `--devQueue`; the cell names do (e7, e10, e11).
 - The TAS module covers gate scheduling only: no 802.1AS synchronisation, preemption, per-stream filtering or central configuration.
 - `--jobs` in `sweep.sh` is untested against `./ns3 run`; serial runs are the safe default.
 
@@ -177,7 +179,8 @@ accompanying paper discloses its own use of AI in its acknowledgment.
 
 ## Citing
 
-If you use this code, please cite the release you used. For the paper's results that is v1.0.0, DOI [10.5281/zenodo.24384365](https://doi.org/10.5281/zenodo.24384364). `CITATION.cff` holds the full metadata, and GitHub's "Cite this repository" button formats it. The accompanying paper is under review; this section will give its reference
+If you use this code, please cite the release you used. The paper cites v1.2.0, whose experiment numbering it follows; the
+results themselves first appeared in v1.0.0, DOI [10.5281/zenodo.24384365](https://doi.org/10.5281/zenodo.24384365). `CITATION.cff` holds the full metadata, and GitHub's "Cite this repository" button formats it. The accompanying paper is under review; this section will give its reference
 once it is published.
 
 ## Licence
