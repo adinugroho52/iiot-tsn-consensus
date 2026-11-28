@@ -114,12 +114,12 @@ footer{padding:8px 28px 12px;font-size:13px;color:var(--ink2);display:flex;justi
     <h2>One port, one cycle</h2>
     <p>This is a real capture from trunk port sw1&nbsp;→&nbsp;sw2 while 16 validators exchange 1024-byte messages every 2&nbsp;ms, far more than the consensus window can carry.</p>
     <p>The control frame leaves 1.704&nbsp;µs into the cycle, two per-hop offsets in. Consensus frames start when their gate opens and stop when the next one no longer fits.</p>
-    <p class="note">Step through the 50 captured cycles. Click a frame for its timestamp.</p>
+    <p class="note">Play to watch the cycle unfold, frame by frame, then move on through the 50 captured cycles. Click a frame for its timestamps.</p>
   </div>
   <div class="vis">
     <div class="controls">
       <label>Cycle <input id="p-c" type="range" min="1" max="50" value="1"> <b id="p-cv">1</b></label>
-      <button class="act" id="p-play" aria-pressed="false">Play cycles</button>
+      <button class="act" id="p-play" aria-pressed="false">Play</button>
       <button class="act" id="p-zoom" aria-pressed="false">Zoom to consensus window</button>
     </div>
     <div class="sheet"><svg id="port" viewBox="0 0 1000 300" role="img" aria-label="Gate states and transmission starts at one port"></svg></div>
@@ -254,7 +254,7 @@ function go(i){
   cur = Math.max(0, Math.min(steps.length - 1, i));
   steps.forEach((s, j) => s.classList.toggle('on', j === cur));
   [...$('nav').children].forEach((b, j) => j === cur ? b.setAttribute('aria-current', 'step') : b.removeAttribute('aria-current'));
-  if (cur !== 2) stopPlay();
+  if (cur !== 2 && playTimer) stopPlay();
   location.hash = cur ? 's' + cur : '';
 }
 document.addEventListener('keydown', e => {
@@ -340,7 +340,7 @@ const P = DATA.port, CYC = P.cycle_ns;
 const cycles = [];
 P.frames.forEach(([t, len, k]) => { const c = Math.floor(t / CYC); (cycles[c] = cycles[c] || []).push([t - c * CYC, len, k]); });
 const txns = len => len * 8 / P.rate_bps * 1e9;
-let zoom = false, playTimer = null, picked = null;
+let zoom = false, playTimer = null, picked = null, playT = null, playLast = 0, holdUntil = 0;
 function sameAsFirst(c){
   const a = cycles[0], b = cycles[c];
   return a.length === b.length && a.every((f, i) => f[0] === b[i][0] && f[1] === b[i][1] && f[2] === b[i][2]);
@@ -357,7 +357,9 @@ function drawPort(){
   const fr = cycles[c] || [];
   fr.forEach((f, i) => {
     const [t, len, k] = f; if (t > t1 || t + txns(len) < t0) return;
-    const w = Math.max(k === 'c' ? 4 : 1.5, x(t + txns(len)) - x(t));
+    if (playT != null && t > playT) return;
+    const end = playT != null ? Math.min(t + txns(len), playT) : t + txns(len);
+    const w = Math.max(k === 'c' ? 4 : 1.5, x(end) - x(t));
     const rct = el('rect', {x: x(t), y: k === 'c' ? fy - 6 : fy, width: w, height: k === 'c' ? fh + 6 : fh,
       fill: k === 'c' ? 'var(--ctrl)' : 'var(--cons)', stroke: picked === i ? 'var(--ink)' : '#fff', 'stroke-width': picked === i ? 2 : .6, tabindex: 0, style:'cursor:pointer'}, svg);
     rct.onclick = () => { picked = i; drawPort(); };
@@ -369,6 +371,19 @@ function drawPort(){
     el('text', {x: x(t), y: fy + fh + 24, 'text-anchor':'middle', 'font-size': 13, fill:'var(--ink2)'}, svg, t / 1000);
   }
   el('text', {x: X1, y: 292, 'text-anchor':'end', 'font-size': 13, fill:'var(--ink2)'}, svg, 'µs into the cycle');
+  if (playT != null){
+    const px = x(playT);
+    el('rect', {x: px, y: 8, width: Math.max(0, X1 - px), height: fy + fh - 6, fill:'var(--sheet)', opacity: .72}, svg);
+    el('line', {x1: px, y1: 8, x2: px, y2: fy + fh + 4, stroke:'var(--ink)', 'stroke-width': 1.5}, svg);
+    el('text', {x: Math.min(px + 6, X1 - 70), y: 14, 'font-size': 13, 'font-weight': 600}, svg, fmt(playT / 1000, 1) + ' µs');
+    const sent = fr.filter(f => f[0] <= playT), open = P.gates.find(g => playT >= g[0] && playT < g[1]);
+    const name = {6:'control', 4:'consensus', 1:'best effort'}[open ? open[2] : 1];
+    $('p-read').innerHTML = `
+      <dt>Time into cycle ${c + 1}</dt><dd>${fmt(playT / 1000, 1)} µs</dd>
+      <dt>Gate open now</dt><dd>${name}</dd>
+      <dt>Frames sent so far</dt><dd>${sent.filter(f => f[2] === 'c').length} control, ${sent.filter(f => f[2] === 'k').length} consensus</dd>`;
+    return;
+  }
   const cons = fr.filter(f => f[2] === 'k'), ctl = fr.filter(f => f[2] === 'c');
   const last = cons[cons.length - 1];
   const kwin = P.gates.find(g => g[2] === 4);
@@ -384,14 +399,32 @@ function drawPort(){
   }
   $('p-read').innerHTML = html;
 }
-function stopPlay(){ if (playTimer){ clearInterval(playTimer); playTimer = null; $('p-play').setAttribute('aria-pressed','false'); $('p-play').textContent = 'Play cycles'; } }
-$('p-c').oninput = () => { picked = null; drawPort(); };
+// Play sweeps a playhead across the cycle (about 5 s per view), shows the
+// finished cycle for a moment, then continues with the next captured cycle.
+function stopPlay(){
+  if (playTimer){ cancelAnimationFrame(playTimer); playTimer = null; }
+  $('p-play').setAttribute('aria-pressed', 'false'); $('p-play').textContent = playT != null ? 'Resume' : 'Play';
+}
+function tick(now){
+  const [t0, t1] = zoom ? [190000, 510000] : [0, CYC];
+  const dt = Math.min(now - playLast, 100); playLast = now;
+  if (holdUntil){
+    if (now < holdUntil){ playTimer = requestAnimationFrame(tick); return; }
+    holdUntil = 0; const s = $('p-c'); s.value = s.value % 50 + 1; playT = t0;
+  } else {
+    playT = (playT == null || playT < t0 ? t0 : playT) + dt / 5000 * (t1 - t0);
+    if (playT >= t1){ playT = null; drawPort(); holdUntil = now + 1500; playTimer = requestAnimationFrame(tick); return; }
+  }
+  drawPort(); playTimer = requestAnimationFrame(tick);
+}
+$('p-c').oninput = () => { picked = null; if (!playTimer) playT = null; drawPort(); };
 $('p-play').onclick = () => {
   if (playTimer) return stopPlay();
-  $('p-play').setAttribute('aria-pressed','true'); $('p-play').textContent = 'Pause';
-  playTimer = setInterval(() => { const s = $('p-c'); s.value = s.value % 50 + 1; picked = null; drawPort(); }, 220);
+  picked = null; holdUntil = 0; playLast = performance.now();
+  $('p-play').setAttribute('aria-pressed', 'true'); $('p-play').textContent = 'Pause';
+  playTimer = requestAnimationFrame(tick);
 };
-$('p-zoom').onclick = () => { zoom = !zoom; $('p-zoom').setAttribute('aria-pressed', zoom); drawPort(); };
+$('p-zoom').onclick = () => { zoom = !zoom; $('p-zoom').setAttribute('aria-pressed', zoom); if (playT != null) playT = zoom ? Math.max(playT, 190000) : playT; drawPort(); };
 drawPort();
 
 /* ---------- step 3: along the path ---------- */
